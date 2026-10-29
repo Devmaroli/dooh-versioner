@@ -1,0 +1,2 @@
+{"request":{"screen":{"name":"1st Ring Road","w":1008,"h":5184,"class":"xv"},"lang":"ar","texts":{"headline":"تخفيضات الصيف","offer":"خصم حتى ٥٠٪ على كل شيء"},"layers":["@bg","@product","@logo","@headline","@offer","@cta"],"productGapPct":2},
+ "response":{"class":"xv","maxLines":{"headline":2,"offer":3},"lineBreaks":{"headline":["تخفيضات","الصيف"],"offer":["خصم حتى ٥٠٪","على كل شيء"]},"align":"center","kashida":{"on":false,"maxPerWord":0},"logoCorner":"slot","hierarchy":1.8,"notes":"Tall pole: stack, 2-word lines, no kashida (narrow)."}}

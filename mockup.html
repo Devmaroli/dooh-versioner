@@ -1,0 +1,59 @@
+<!doctype html><html><head><meta charset="utf-8"><style>
+*{box-sizing:border-box}body{margin:0;font:13px system-ui;background:#1b1d22;color:#ddd}
+.top{height:46px;background:#111;display:flex;align-items:center;gap:12px;padding:0 14px;border-bottom:1px solid #333}
+.top b{color:#fff}.tab{padding:6px 12px;border-radius:6px;background:#2a2d34}.tab.on{background:#4f7cff;color:#fff}
+.btn{margin-left:auto;background:#22a35a;color:#fff;padding:7px 14px;border-radius:6px}
+.wrap{display:flex;height:754px}.panel{width:230px;background:#22252b;padding:12px;border-right:1px solid #333}
+.panel h4{margin:4px 0 8px;color:#999;font-size:11px;text-transform:uppercase}
+.layer{padding:7px;border-radius:5px;margin-bottom:4px;background:#2a2d34}.layer.sel{outline:1px solid #4f7cff}
+.center{flex:1;display:flex;flex-direction:column}.sizes{display:flex;gap:6px;padding:8px;background:#1f2127;border-bottom:1px solid #333;flex-wrap:wrap}
+.chip{padding:5px 9px;border-radius:12px;background:#2a2d34;font-size:12px}.chip.on{background:#4f7cff;color:#fff}
+.stage{flex:1;display:flex;align-items:center;justify-content:center;background:repeating-conic-gradient(#25272d 0 25%,#202227 0 50%) 0/20px 20px}
+.ad{position:relative;background:linear-gradient(135deg,#0b3d91,#00a3a3);overflow:hidden;color:#fff}
+.ad .logo{position:absolute;background:#fff;color:#0b3d91;font-weight:800;border-radius:4px;display:flex;align-items:center;justify-content:center}
+.ad .hl{position:absolute;font-weight:800}.ad .price{position:absolute;background:#ffcc00;color:#111;font-weight:800;border-radius:50%;display:flex;align-items:center;justify-content:center;text-align:center}
+.ad .prod{position:absolute;background:rgba(255,255,255,.25);border-radius:8px;display:flex;align-items:center;justify-content:center}
+.props{width:260px;background:#22252b;padding:12px;border-left:1px solid #333}
+.row{display:flex;justify-content:space-between;margin:6px 0}.in{background:#2a2d34;padding:3px 8px;border-radius:4px}
+.note{font-size:11px;color:#e0a040;margin-top:10px}
+.grid{padding:16px;display:flex;flex-wrap:wrap;gap:18px;align-items:flex-end;height:754px;overflow:hidden}
+.cell .lab{font-size:11px;color:#aaa;margin-top:4px}.warn{color:#e0a040}
+</style></head><body>
+<section id="editor"><div class="top"><b>DOOH Versioner</b><span>Campaign: Summer Sale</span><span class="tab on">Editor</span><span class="tab">All sizes</span><span class="tab">Data sheet</span><span class="in">Version: v02 · AR (RTL) ▾</span><span class="btn">Export…</span></div>
+<div class="wrap"><div class="panel"><h4>Layers</h4>
+<div class="layer">🖼 Background</div><div class="layer">🔷 Logo <small>· anchor top-right</small></div><div class="layer sel">T Headline <small>· {headline}</small></div><div class="layer">🛍 Product image <small>· {image}</small></div><div class="layer">● Price badge <small>· {price}</small></div><div class="layer">T Offer <small>· {offer}</small></div>
+<h4 style="margin-top:18px">Sizes (EXAMPLE)</h4><div class="layer">Master · 1920×1080</div><div class="layer">Portrait · 1080×1920</div><div class="layer">Wide · 1920×540</div><div class="layer">Square · 1080×1080</div><div class="layer">Mega · 3840×1080</div>
+<div class="note">Example sizes only — replace with booked screen specs.</div></div>
+<div class="center"><div class="sizes"><span class="chip on">1920×1080 master</span><span class="chip">1080×1920</span><span class="chip">1920×540</span><span class="chip">1080×1080</span><span class="chip">3840×1080 ✎ override</span></div>
+<div class="stage"><div class="ad" style="width:768px;height:432px;direction:rtl">
+<div class="logo" style="right:24px;top:22px;width:110px;height:44px">LOGO</div>
+<div class="hl" style="right:24px;top:110px;font-size:46px;width:400px">تخفيضات الصيف</div>
+<div class="hl" style="right:24px;top:180px;font-size:22px;font-weight:500">خصم حتى ٥٠٪ على كل شيء</div>
+<div class="prod" style="left:40px;top:90px;width:260px;height:260px">Product image</div>
+<div class="price" style="left:250px;top:60px;width:110px;height:110px">٩٫٩٠<br>د.ك</div>
+<div style="position:absolute;right:24px;top:100px;width:400px;height:64px;border:2px dashed #4f7cff"></div></div></div></div>
+<div class="props"><h4>Headline · properties</h4>
+<div class="row"><span>Binding</span><span class="in">{headline}</span></div>
+<div class="row"><span>Anchor H</span><span class="in">Right ⇄ (RTL mirror)</span></div>
+<div class="row"><span>Anchor V</span><span class="in">Top</span></div>
+<div class="row"><span>Scale</span><span class="in">% of height · 10%</span></div>
+<div class="row"><span>Text fit</span><span class="in">Shrink</span></div>
+<div class="row"><span>Font min/max</span><span class="in">24 / 120 px</span></div>
+<div class="row"><span>Safe margin</span><span class="in">4%</span></div>
+<div class="row"><span>Font</span><span class="in">Client Arabic (ASSUMED)</span></div>
+<h4 style="margin-top:18px">This size</h4><div class="row"><span>Override</span><span class="in">None · Add</span></div>
+<h4 style="margin-top:18px">Export</h4><div class="row"><span>Format</span><span class="in">MP4 + JPG</span></div><div class="row"><span>Duration</span><span class="in">10 s @ 25fps (EXAMPLE)</span></div>
+<div class="note">⚠ 2 warnings in other sizes — see All sizes</div></div></div></section>
+<section id="grid"><div class="top"><b>DOOH Versioner</b><span>Campaign: Summer Sale</span><span class="tab">Editor</span><span class="tab on">All sizes</span><span class="tab">Data sheet</span><span class="in">Versions: v01 EN, v02 AR ▾</span><span class="btn">Export 10 files</span></div>
+<div class="grid" id="g"></div></section>
+<script>
+const S=[[1920,1080],[1080,1920],[1920,540],[1080,1080],[3840,1080]],V=[['ltr','SUMMER SALE','Up to 50% off everything','KD 9.90','v01 EN'],['rtl','تخفيضات الصيف','خصم حتى ٥٠٪','٩٫٩٠ د.ك','v02 AR']];
+const g=document.getElementById('g');
+for(const v of V)for(const [w,h] of S){const k=Math.min(250/w,190/h),W=w*k,H=h*k,u=Math.min(W,H),r=v[0]=='rtl',side=r?'right':'left',oth=r?'left':'right';
+const warn=(w==1920&&h==540)?'<span class="warn"> ⚠ min font</span>':'';
+g.insertAdjacentHTML('beforeend',`<div class="cell"><div class="ad" style="width:${W}px;height:${H}px;direction:${v[0]}">
+<div class="logo" style="${oth}:${u*.05}px;top:${u*.05}px;width:${u*.25}px;height:${u*.1}px;font-size:${u*.05}px">LOGO</div>
+<div class="hl" style="${side}:${u*.06}px;top:${H*.28}px;width:${W*.6}px"><div style="font-size:${u*.1}px;line-height:1.05">${v[1]}</div><div style="font-size:${u*.05}px;font-weight:500;margin-top:${u*.02}px">${v[2]}</div></div>
+<div class="price" style="${oth}:${u*.08}px;bottom:${u*.08}px;width:${u*.28}px;height:${u*.28}px;font-size:${u*.06}px">${v[3]}</div></div>
+<div class="lab">${v[4]} · ${w}×${h} (EXAMPLE)${warn}</div></div>`)}
+</script></body></html>

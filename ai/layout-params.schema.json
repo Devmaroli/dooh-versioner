@@ -1,0 +1,11 @@
+{"$schema":"https://json-schema.org/draft/2020-12/schema","title":"LayoutParams","type":"object","required":["class"],"additionalProperties":false,
+"properties":{
+"class":{"enum":["xw","uw","h","sq","v","uv","xv"]},
+"slotScale":{"type":"object","additionalProperties":{"type":"number","minimum":0.5,"maximum":1.5}},
+"maxLines":{"type":"object","properties":{"headline":{"type":"integer","minimum":1,"maximum":4},"offer":{"type":"integer","minimum":1,"maximum":4}}},
+"lineBreaks":{"type":"object","properties":{"headline":{"type":"array","items":{"type":"string"}},"offer":{"type":"array","items":{"type":"string"}}}},
+"align":{"enum":["start","center","end"]},
+"kashida":{"type":"object","properties":{"on":{"type":"boolean"},"maxPerWord":{"type":"integer","minimum":0,"maximum":3}}},
+"logoCorner":{"enum":["tl","tr","bl","br","slot"]},
+"hierarchy":{"type":"number","minimum":1.4,"maximum":2.2},
+"notes":{"type":"string","maxLength":400}}}

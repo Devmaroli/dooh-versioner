@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape" viewBox="0 0 1920 1080" width="1920" height="1080">
+  <rect id="bg" inkscape:label="Background" x="0" y="0" width="1920" height="1080" fill="#7a1f5c"/>
+  <g id="kv" inkscape:label="KV lockup @kv" transform="translate(120,160)">
+    <rect id="pack" x="0" y="0" width="520" height="700" fill="#f2e6ee"/>
+    <text id="kvtext" x="40" y="660" font-size="48" font-family="Cairo" fill="#7a1f5c">NEW</text>
+  </g>
+  <rect id="logo" inkscape:label="Brand logo" x="1500" y="60" width="360" height="90" fill="#ffffff"/>
+  <text id="headline" x="860" y="420" font-size="130" font-family="Cairo" font-weight="800" fill="#ffcc00">Summer Sale Weekend Specials</text>
+  <text id="offer" x="860" y="540" font-size="56" font-family="Cairo" fill="#f5f5f5">Up to 50% off everything</text>
+  <text id="price" x="1540" y="900" font-size="80" font-family="Cairo" fill="#ffcc00">KD 9.90</text>
+</svg>
