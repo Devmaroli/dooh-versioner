@@ -1,0 +1,97 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><title>DOOH versioner — Step 1 Load & tag (mockup)</title>
+<style>
+:root{--bg:#0f1115;--pn:#181b22;--ln:#2a2f3a;--tx:#e8eaf0;--mu:#8a91a3;--ac:#4f8cff;--ok:#2bb673;--wa:#f5a524;--er:#ef4444}
+*{box-sizing:border-box}body{margin:0;font:13px/1.4 system-ui,Segoe UI,Arial;background:var(--bg);color:var(--tx)}
+header{display:flex;align-items:center;gap:16px;padding:10px 18px;border-bottom:1px solid var(--ln);background:var(--pn)}
+.step{display:flex;gap:6px;align-items:center;color:var(--mu)}.step b{width:22px;height:22px;border-radius:50%;display:grid;place-items:center;background:var(--ln);font-size:11px}
+.step.on{color:var(--tx)}.step.on b{background:var(--ac)}.sep{flex:0 0 30px;height:1px;background:var(--ln)}
+.mock{margin-left:auto;font-size:11px;color:var(--wa);border:1px solid var(--wa);padding:2px 8px;border-radius:10px}
+main{display:grid;grid-template-columns:1fr 330px;gap:14px;padding:14px 18px}
+.drop{border:2px dashed var(--ln);border-radius:10px;padding:14px;text-align:center;color:var(--mu);margin-bottom:12px}.drop b{color:var(--tx)}
+.pair{background:var(--pn);border:1px solid var(--ln);border-radius:10px;padding:10px;margin-bottom:12px}
+.pair h3{margin:0 0 8px;font-size:13px;display:flex;gap:8px;align-items:center}.badge{font-size:11px;padding:1px 7px;border-radius:9px;background:#1f3a2c;color:#7ee2a8}
+.badge.w{background:#3a2e14;color:#f5c66b}.badge.e{background:#3b1717;color:#ff9b9b}
+.cards{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.card{border:1px solid var(--ln);border-radius:8px;overflow:hidden;cursor:pointer;background:#12141a}.card.sel{outline:2px solid var(--ac)}
+.card .th{position:relative;aspect-ratio:16/9;background:#000}.card img{width:100%;height:100%;object-fit:contain;display:block}
+.meta{padding:7px 9px;display:flex;flex-wrap:wrap;gap:6px;align-items:center}.meta .fn{width:100%;font-weight:600}
+.chip{font-size:11px;padding:1px 7px;border-radius:9px;background:var(--ln);color:var(--tx)}
+.lang{cursor:pointer;font-weight:700}.lang.EN{background:#1d3557}.lang.AR{background:#5a2a52}.lang.none{background:#3b1717;color:#ff9b9b}
+.warn{font-size:12px;color:#f5c66b;margin-top:6px}
+.tagview{background:var(--pn);border:1px solid var(--ln);border-radius:10px;padding:10px}
+.tagview h3{margin:0 0 8px;font-size:13px}.tv{display:grid;grid-template-columns:1fr 300px;gap:10px}
+.stage{position:relative;background:#000;border-radius:6px;overflow:hidden}.stage img{width:100%;display:block}
+.box{position:absolute;border:2px solid;border-radius:2px;pointer-events:none}.box span{position:absolute;top:-1px;left:-1px;font-size:10px;padding:0 4px;color:#000;font-weight:700}
+.layers{max-height:520px;overflow:auto}.ly{display:flex;align-items:center;gap:6px;padding:5px 6px;border-bottom:1px solid var(--ln);font-size:12px}
+.ly.hid{opacity:.45}.ly .nm{flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.ly.cur{background:#1e2533}
+.role{cursor:pointer;font-size:11px;padding:1px 7px;border-radius:9px;color:#000;font-weight:700}
+.fl{cursor:pointer;font-size:10px;padding:0 5px;border:1px solid var(--ln);border-radius:6px;color:var(--mu)}.fl.on{border-color:var(--ac);color:var(--tx);background:#1d2a44}
+aside .pf{background:var(--pn);border:1px solid var(--ln);border-radius:10px;padding:10px;margin-bottom:12px}
+.pf h3{margin:0 0 6px;font-size:13px}.it{display:flex;gap:7px;padding:4px 0;font-size:12px;border-bottom:1px dashed var(--ln)}.it i{font-style:normal;width:16px}
+.btn{width:100%;padding:10px;border-radius:8px;border:0;background:var(--ac);color:#fff;font-weight:700;font-size:14px}.btn:disabled{background:var(--ln);color:var(--mu)}
+.why{font-size:11px;color:var(--mu);margin-top:6px}.leg{display:flex;flex-wrap:wrap;gap:5px;margin-top:6px}
+</style></head><body>
+<header><b>DOOH versioner</b>
+<div class="step on"><b>1</b>Load &amp; tag</div><div class="sep"></div><div class="step"><b>2</b>Adapt</div><div class="sep"></div><div class="step"><b>3</b>Export</div>
+<span class="mock">MOCKUP · static · local art</span></header>
+<main><section>
+<div class="drop"><b>Drop masters here</b> (PSD, SVG, PNG — several at once) · or <u>browse</u><br>Language from filename suffix: <code>_AR</code> <code>-ar</code> <code> Arabic</code> <code>عربي</code> … → AR · no suffix → EN · click the chip to change</div>
+<div id="pairs"></div>
+<div class="tagview"><h3 id="tvh"></h3><div class="tv"><div class="stage" id="stage"></div><div><div class="layers" id="layers"></div><div class="leg" id="leg"></div></div></div></div>
+</section>
+<aside><div class="pf"><h3>Pre-flight</h3><div id="pf"></div></div>
+<button class="btn" id="go">Continue to adaptation →</button><div class="why" id="why"></div></aside></main>
+<script>
+const ROLES={headline:"#ffd166",offer:"#06d6a0",product:"#ef476f",logo:"#4cc9f0",price:"#c77dff",legal:"#adb5bd",bg:"#6c757d",ignore:"#444"};
+const RK=Object.keys(ROLES);
+/* Local art when available (never deployed); deployed copy falls back to the sample SVG. */
+const ART=(lang)=>`../samples/real/renders/Rio_${lang}_preview.jpg`;
+const L=(name,role,b,o={})=>({name,role,b,hidden:!!o.hidden,blend:o.blend||"normal",clear:!!o.clear,overlap:!!o.overlap,note:o.note||""});
+const M=[
+ {file:"Rio_EN.psd",w:1920,h:1080,img:ART("EN"),liveText:false,layers:[
+  L("Group 4 (tagline, raster)","headline",[196,948,1724,1015],{clear:true}),L("Layer 6 · pill","offer",[1027,118,1790,233]),L("Layer 7 · pill","offer",[1030,407,1790,522]),L("Layer 8 · pill","offer",[1029,696,1790,811]),
+  L("Vector Smart Object copy · pack","product",[109,98,801,819],{clear:true}),L("Vector Smart Object copy · shadow","product",[24,770,952,872],{blend:"multiply",overlap:true}),
+  L("Vector Smart Object (hidden)","ignore",[1098,98,1790,819],{hidden:true}),L("Layer 1 · flat salmon","bg",[0,0,1920,1080]),L("Layer 0 · white strip (covered)","ignore",[0,0,1920,378])]},
+ {file:"Rio_AR.psd",w:1920,h:1080,img:ART("AR"),liveText:false,layers:[
+  L("Arabic text (raster + white overlay)","headline",[501,911,1420,1031],{clear:true}),L("Vector Smart Object · pill","offer",[91,155,888,278]),L("Vector Smart Object · pill","offer",[91,425,905,549]),L("Vector Smart Object · pill","offer",[91,695,905,819]),
+  L("Vector Smart Object copy · pack","product",[1217,159,1830,811],{clear:true}),L("Vector Smart Object copy · shadow","product",[1121,763,1973,857],{blend:"multiply",overlap:true}),
+  L("Arabic logo_1.7HD-Ar (hidden, masked)","logo",[50,40,293,218],{hidden:true}),L("Layer 1 · flat salmon","bg",[0,0,1920,1080]),L("Layer 0 · white strip (covered)","ignore",[0,0,1920,378])]}];
+/* Same rule as engine langFromFilename(). */
+function langFromFilename(n){const s=n.replace(/\.[a-z0-9]+$/i,"").trim();let m=s.match(/(?:[\s_\-.]+)(ar|arb|arabic)$/i)||s.match(/(?<=[a-z0-9])(Ar|AR|Arabic|ARABIC)$/)||s.match(/[\s_\-.]*(عربي)$/);if(m)return{lang:"AR",base:s.slice(0,m.index).replace(/[\s_\-.]+$/,"")};
+ m=s.match(/(?:[\s_\-.]+)(en|eng|english)$/i)||s.match(/(?<=[a-z0-9])(En|EN)$/);return{lang:"EN",base:m?s.slice(0,m.index).replace(/[\s_\-.]+$/,""):s,implicit:!m};}
+M.forEach(m=>{const r=langFromFilename(m.file);m.lang=r.lang;m.base=r.base;});
+let SEL=0;
+const ratio=(w,h)=>(w/h).toFixed(2)+":1",group=(w,h)=>{const r=w/h;return r>=2.5?"ribbon / wide strip":r>1.15?"landscape":r>0.87?"square":r>0.4?"portrait":"tall column";};
+function pairs(){const g={};M.forEach((m,i)=>{(g[m.base.toLowerCase()+"|"+m.w+"x"+m.h]=g[m.base.toLowerCase()+"|"+m.w+"x"+m.h]||[]).push(i);});return Object.values(g);}
+function render(){
+ const P=document.getElementById("pairs");P.innerHTML="";
+ pairs().forEach(ix=>{const ms=ix.map(i=>M[i]),en=ms.find(m=>m.lang==="EN"),ar=ms.find(m=>m.lang==="AR");const d=document.createElement("div");d.className="pair";
+  const st=en&&ar?'<span class="badge">EN + AR paired · same size</span>':`<span class="badge w">missing ${en?"AR":"EN"} master</span>`;
+  d.innerHTML=`<h3>${ms[0].base} · ${ms[0].w}×${ms[0].h} ${st}</h3><div class="cards"></div>`;
+  ix.forEach(i=>{const m=M[i],c=document.createElement("div");c.className="card"+(i===SEL?" sel":"");
+   c.innerHTML=`<div class="th"><img src="${m.img}" onerror="this.src='../samples/sample.svg'"></div><div class="meta"><span class="fn">${m.file}</span>
+   <span class="chip lang ${m.lang||"none"}" title="click to change">${m.lang||"no language"}</span><span class="chip">${m.w}×${m.h}</span><span class="chip">${ratio(m.w,m.h)}</span><span class="chip">${group(m.w,m.h)}</span><span class="chip">${m.layers.filter(l=>l.role!=="ignore").length} tagged layers</span></div>`;
+   c.querySelector(".lang").onclick=e=>{e.stopPropagation();m.lang=m.lang==="EN"?"AR":m.lang==="AR"?"":"EN";render();};c.onclick=()=>{SEL=i;render();};d.querySelector(".cards").appendChild(c);});
+  const sz=new Set(ms.map(m=>m.w+"x"+m.h));if(sz.size>1)d.innerHTML+=`<div class="warn">⚠ size mismatch inside pair</div>`;
+  if(ms.some(m=>!m.lang))d.innerHTML+=`<div class="warn">⚠ a master has no language</div>`;P.appendChild(d);});
+ const m=M[SEL];document.getElementById("tvh").textContent=`Layer tagging · ${m.file} (${m.lang||"no language"}) — click a role chip to change it`;
+ const S=document.getElementById("stage");S.innerHTML=`<img src="${m.img}" onerror="this.src='../samples/sample.svg'">`;
+ m.layers.forEach(l=>{if(l.hidden||l.role==="ignore"||l.role==="bg")return;const b=document.createElement("div");b.className="box";const[x0,y0,x1,y1]=l.b;
+  Object.assign(b.style,{left:x0/m.w*100+"%",top:y0/m.h*100+"%",width:(Math.min(x1,m.w)-x0)/m.w*100+"%",height:(y1-y0)/m.h*100+"%",borderColor:ROLES[l.role],borderStyle:l.blend==="multiply"?"dashed":"solid"});b.innerHTML=`<span style="background:${ROLES[l.role]}">${l.role}${l.clear?" .clear":""}${l.overlap?" .overlap":""}</span>`;S.appendChild(b);});
+ const Ly=document.getElementById("layers");Ly.innerHTML="";
+ m.layers.forEach(l=>{const r=document.createElement("div");r.className="ly"+(l.hidden?" hid":"");
+  r.innerHTML=`<span class="nm" title="${l.name}">${l.hidden?"🚫 ":""}${l.name}</span><span class="role" style="background:${ROLES[l.role]}">${l.role}</span><span class="fl ${l.clear?"on":""}">.clear</span><span class="fl ${l.overlap?"on":""}">.overlap</span>`;
+  r.querySelector(".role").onclick=()=>{l.role=RK[(RK.indexOf(l.role)+1)%RK.length];render();};
+  const f=r.querySelectorAll(".fl");f[0].onclick=()=>{l.clear=!l.clear;render();};f[1].onclick=()=>{l.overlap=!l.overlap;render();};Ly.appendChild(r);});
+ document.getElementById("leg").innerHTML=RK.map(k=>`<span class="role" style="background:${ROLES[k]}">${k}</span>`).join("")+'<span class="chip">dashed = multiply</span>';
+ /* pre-flight */
+ const B=[],W=[];M.forEach(m=>{if(!m.lang)B.push(`${m.file}: no language`);if(!m.layers.some(l=>l.role==="headline"&&!l.hidden))B.push(`${m.file}: no headline tagged`);
+  if(!m.liveText)W.push(`${m.file}: no live text — copy is raster, can't be edited or re-typeset`);
+  if(m.layers.some(l=>l.role==="logo"&&l.hidden))W.push(`${m.file}: logo layer is hidden`);if(!m.layers.some(l=>l.role==="logo"&&!l.hidden))W.push(`${m.file}: no visible logo (brand only on pack)`);});
+ W.push("AR pack differs from EN pack (flavour Maize vs Mexico) — confirm intended");
+ pairs().forEach(ix=>{if(ix.length<2)W.push(`${M[ix[0]].file}: no ${M[ix[0]].lang==="EN"?"AR":"EN"} partner`);});
+ document.getElementById("pf").innerHTML=B.map(t=>`<div class="it"><i>⛔</i>${t}</div>`).join("")+W.map(t=>`<div class="it"><i>⚠️</i>${t}</div>`).join("")+(B.length?"":`<div class="it"><i>✅</i>No blockers</div>`);
+ const g=document.getElementById("go");g.disabled=B.length>0;document.getElementById("why").textContent=B.length?`Disabled: ${B.length} blocker(s). Each master needs a language and a headline.`:"Warnings don't block. Next: Adapt (mockup — not wired).";}
+if(location.hash==="#ar")SEL=1;if(location.hash==="#blocked"){M[1].lang="";}
+render();
+</script></body></html>
