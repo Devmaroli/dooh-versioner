@@ -2,3 +2,7 @@ node_modules
 .vercel
 .env*
 dist
+
+work/
+playwright-report/
+test-results/
