@@ -159,7 +159,25 @@ function pxContrast(ctx,m,P){const lum=(r,g,b)=>{const f=v=>{v/=255;return v<=.0
       if(tx.length>10&&bg.length>10)hlC=+cr(med(tx),med(bg)).toFixed(2);}}
   let offC=null;const ou=unitCanvas(m,"offer");if(ou){const offs=roleLayers(m,"offer");let mins=[];offs.forEach(L=>{if(!L.px)return;const d=L.px.getContext("2d").getImageData(0,0,L.px.width,L.px.height).data,a=[];for(let i=0;i<d.length;i+=16)if(d[i+3]>200)a.push(lum(d[i],d[i+1],d[i+2]));if(a.length<20)return;a.sort((x,y)=>x-y);mins.push(cr(a[Math.floor(a.length*.03)],a[Math.floor(a.length*.6)]));});if(mins.length)offC=+Math.min(...mins).toFixed(2);}
   return {headline:hlC,offer:offC};}
+/**
+ * Detect content the semantic composer cannot place. A campaign PSD may have
+ * multiple text groups (contact numbers, legal copy, etc.) beyond the four
+ * built-in roles. Silently dropping those layers is worse than a safe fallback.
+ */
+function unplacedVisibleLayers(m){
+  const visible=flatL(m.a.layers).filter(l=>l.px&&!l.hidden&&!(l.children&&l.children.length)&&l.box&&l.box[2]>0&&l.box[3]>0);
+  const placed=new Set(['bg','product','headline','offer','logo','price'].flatMap(role=>roleLayers(m,role)));
+  return visible.filter(l=>!placed.has(l));
+}
 function drawPx(ctx,row,s,P){const tw=s.w,th=s.h,m=ART,bi=bgInfo(m);CPX=[];
+  const missing=unplacedVisibleLayers(m);
+  if(missing.length&&m.a.composite){
+    drawFlattenedMaster(ctx,s,m);
+    P.PXMODE='safe composition: '+missing.length+' unmapped visible layer(s)';
+    P.PXQ={hlPx:0,hlPct:0,overlapPx:0,outside:false,mode:P.PXMODE,needsReview:true};
+    P.PXC=null;P.PXR={};
+    return P;
+  }
   if(Math.abs(Math.log((tw/th)/(m.a.w/m.a.h)))<=0.02&&m.a.composite&&!(s.faces&&s.faces.length>1)){ctx.drawImage(m.a.composite,0,0,tw,th);P.PXMODE="master as-is (same ratio, scaled)";const hu3=unitCanvas(m,"headline");P.PXR={};if(hu3){const f=tw/m.a.w;P.PXR.hlMask=[hu3.c,{x:hu3.box[0]*f,y:hu3.box[1]*f,w:hu3.c.width*f,h:hu3.c.height*f,q:f}];}P.PXC=pxContrast(ctx,m,P);P.PXQ={hlPx:Math.round((hu3?hu3.box[3]:0)*th/m.a.h),hlPct:+((hu3?hu3.box[3]:0)/m.a.h*100).toFixed(1),overlapPx:0,outside:false,mode:P.PXMODE};return P;}
   if(bi){if(bi.flat){ctx.fillStyle=bi.color;ctx.fillRect(0,0,tw,th);}else{const L=bi.L,f=Math.max(tw/L.px.width,th/L.px.height);const w=tw/f,h=th/f,fo=(m.an.rules.find(r=>r.key==="focal")||{}).value||[.5,.5];
     const x=Math.max(0,Math.min(L.px.width-w,fo[0]*L.px.width-w/2)),y=Math.max(0,Math.min(L.px.height-h,fo[1]*L.px.height-h/2));ctx.drawImage(L.px,x,y,w,h,0,0,tw,th);}}
@@ -191,7 +209,32 @@ function drawPx(ctx,row,s,P){const tw=s.w,th=s.h,m=ART,bi=bgInfo(m);CPX=[];
   P.PXC=pxContrast(ctx,m,P);
   if(s.faces&&s.faces.length>1){ctx.save();ctx.strokeStyle="rgba(255,255,255,.7)";ctx.setLineDash([Math.max(tw,th)*.01,Math.max(tw,th)*.008]);ctx.lineWidth=Math.max(tw,th)*.003;s.faces.forEach(f=>ctx.strokeRect(f.x,f.y,f.w,f.h));ctx.restore();}
   return P;}
-function draw(ctx,row,s,P,forceTpl){const tw=s.w,th=s.h;P=P||plan(row,s,forceTpl);if(hasPx())return drawPx(ctx,row,s,P);
+/**
+ * Flattened PNG/JPG/WebP assets cannot be safely reflowed into new ratios.
+ * Preserve every original pixel using contain, with a soft ambient extension.
+ * The same drawing path powers both previews and PNG exports.
+ */
+function drawFlattenedMaster(ctx,s,m){
+  const src=m.a.composite,tw=s.w,th=s.h,sw=src.width,sh=src.height;
+  if(!(tw>0&&th>0&&sw>0&&sh>0))return;
+  const cover=Math.max(tw/sw,th/sh),cw=sw*cover,ch=sh*cover;
+  ctx.save();
+  ctx.fillStyle='#17202b';ctx.fillRect(0,0,tw,th);
+  if(typeof ctx.filter==='string')ctx.filter='blur('+Math.max(8,Math.round(Math.min(tw,th)*.035))+'px) brightness(0.55)';
+  else ctx.globalAlpha=.35;
+  ctx.drawImage(src,(tw-cw)/2,(th-ch)/2,cw,ch);
+  ctx.restore();
+  const margin=Math.min(tw,th)*.045;
+  const fit=Math.min((tw-2*margin)/sw,(th-2*margin)/sh);
+  const w=sw*fit,h=sh*fit;
+  ctx.drawImage(src,(tw-w)/2,(th-h)/2,w,h);
+}
+function draw(ctx,row,s,P,forceTpl){const tw=s.w,th=s.h;
+  if(!P)useMaster(s,row);
+  if(ART&&ART.a&&ART.a.source&&ART.a.source.format==='image'&&ART.a.composite){
+    drawFlattenedMaster(ctx,s,ART);return P||{PXMODE:'flattened artwork · full creative preserved'};
+  }
+  P=P||plan(row,s,forceTpl);if(hasPx())return drawPx(ctx,row,s,P);
   P.ml.forEach((m,i)=>{const r=P.RECTS[i];if(!r)return;if(m.L.kind==="text"&&!P.T[m.L.id])return;const L=m.L;ctx.save();
     if(L.kind==="bg"){let c;if(aiOn(P.k,"crop")){c=Adapt.saliencyCrop(AI.sal,AI.W,AI.H,tw/th);const q=PHOTO.width/AI.W;c={x:c.x*q,y:c.y*q,w:c.w*q,h:c.h*q};}
       else{const f=Math.max(tw/PHOTO.width,th/PHOTO.height);c={w:tw/f,h:th/f};c.x=(PHOTO.width-c.w)/2;c.y=(PHOTO.height-c.h)/2;}
