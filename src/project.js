@@ -18,7 +18,7 @@ export function workflowStatus(step, assets, selectedCount) {
   if (step === 'import') return mapped ? 'Complete' : assets.length ? 'Needs attention' : 'Ready'
   if (step === 'analyse') return mapped ? 'Ready' : 'Not ready'
   if (step === 'adapt') return mapped ? 'Ready' : 'Not ready'
-  if (step === 'review' || step === 'export') return mapped && selectedCount > 0 ? 'Manual review required' : 'Not ready'
+  if (step === 'review' || step === 'refine' || step === 'export') return mapped && selectedCount > 0 ? 'Manual review required' : 'Not ready'
   return 'Not implemented'
 }
 export function metadataFor(art) {

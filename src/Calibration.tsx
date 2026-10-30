@@ -2,7 +2,7 @@ import { verifyEmbeddedVector } from './embeddedVectors.js'
 import { useEffect, useRef, useState } from 'react'
 import { SCREENS } from './data/presets.js'
 import { renderCalibration, pickArtwork, backgroundBounds } from './engine/render.js'
-import { FAMILIES, GUIDE_PRESETS, contentUnits, guideLayout, guideFindings, initialProof, layoutFamily, sourceSignature } from './layoutGuides.js'
+import { screenProofKey, createScreenProof, FAMILIES, GUIDE_PRESETS, contentUnits, guideLayout, guideFindings, initialProof, layoutFamily, sourceSignature } from './layoutGuides.js'
 import { arrangeFrames } from './words.js'
 import { allLayers, drawSourceLayers, unionBounds } from './artwork.js'
 import { editorSnapshot, editorHistory, commitEditorAction, finishEditorAction, travelEditorHistory, restoreEditorSnapshot } from './editorHistory.js'
@@ -24,7 +24,7 @@ function ProofCanvas({ art, screen, proof, large = false }: any) {
   const [vectorError,setVectorError]=useState('')
   useEffect(() => {
     const result = renderCalibration(art, screen, large ? 1600 : 460, large ? 2200 : 280, proof)
-    let active=true;setVectorError('');host.current?.replaceChildren(result.c);result.ready?.catch(error=>{if(active)setVectorError(`Vector preview unavailable: ${error.message}`)});return()=>{active=false}
+    let active=true;host.current?.replaceChildren(result.c);result.ready?.then(()=>{if(active)setVectorError('')}).catch(error=>{if(active)setVectorError(`Vector preview unavailable: ${error.message}`)});return()=>{active=false}
   })
   return <><div className="proof-canvas" ref={host} />{vectorError&&<p role="alert">{vectorError}</p>}</>
 }
@@ -41,7 +41,7 @@ function LayerThumbnail({ layers, large = false }: any) {
   return <canvas ref={canvas} width={large ? 600 : 100} height={large ? 600 : 100} aria-hidden="true" />
 }
 
-export function Calibration({ art, onChange, onBatch }: any) {
+export function Calibration({ art, onChange, onBatch, targetScreen, onClose }: any) {
   const [headlineSourceId, setHeadlineSourceId] = useState('')
   const [preparing,setPreparing]=useState(false)
   const currentArt=useRef<any>(art);currentArt.current=art
@@ -60,14 +60,17 @@ export function Calibration({ art, onChange, onBatch }: any) {
   const dialog = useRef<HTMLDivElement>(null)
   const canvasHost = useRef<HTMLDivElement>(null)
   const drag = useRef<any>(null)
-  const screen = PRESETS.find(s => s.name === active)
+  const outputMode=!!targetScreen, storeName=outputMode?'outputs':'proofs', proofKey=(s:any)=>outputMode?screenProofKey(s):layoutFamily(s)
+  const screen = (outputMode?SCREENS:PRESETS).find(s => s.name === active)
   const signature = sourceSignature(art)
-  const getProof = (s: any) => art.calibration?.proofs?.[layoutFamily(s)] || initialProof(art, s)
+  const getProof = (s: any) => art.calibration?.[storeName]?.[proofKey(s)] || (outputMode?createScreenProof(art,s):initialProof(art,s))
+  const closeEditor=()=>{setActive(null);onClose?.()}
+  useEffect(()=>{if(targetScreen)open(targetScreen)},[targetScreen?.name])
   const approvedCount = FAMILIES.filter(f => art.calibration?.proofs?.[f]?.approved && art.calibration.proofs[f].sourceSignature === signature).length
   const proof = screen ? getProof(screen) : null
   const layout = screen ? guideLayout(art, screen, proof) : []
   const panel = screen ? panelForArtwork(art, layout, proof) : { version: 1 as const, nodes: [] }
-  const issues = screen ? guideFindings(art, screen, layout) : []
+  const issues = screen ? guideFindings(art, screen, layout, proof) : []
   const history = editorHistory(art)
   function beginAction(label: string) {
     if (pendingHistory.current || historyGesture.current?.recorded) return
@@ -75,11 +78,13 @@ export function Calibration({ art, onChange, onBatch }: any) {
   }
   function changed() {
     const pending = pendingHistory.current
-    if (pending) { const committed = commitEditorAction(art, pending.before, pending.label, active, { selected: pending.selected, special: pending.special }); pendingHistory.current = null; if (historyGesture.current && committed) historyGesture.current.recorded = true }
+    if (pending) { const committed = commitEditorAction(art, pending.before, pending.label, active, { selected: pending.selected, special: pending.special, scope: outputMode?'output':'guide' }); pendingHistory.current = null; if (historyGesture.current && committed) historyGesture.current.recorded = true }
     else finishEditorAction(art)
     onChange()
   }
+  function canTravel(direction:string){const entries=direction==='undo'?history.past:history.future,entry=entries[entries.length-1];return !!entry&&(entry.scope||'guide')===(outputMode?'output':'guide')&&(!outputMode||entry.screen===active)}
   function travel(direction: string) {
+    if(!canTravel(direction))return
     pendingHistory.current = null; historyGesture.current = null; drag.current = null
     const entry = travelEditorHistory(art, direction, { selected, special })
     if (!entry) return
@@ -145,7 +150,7 @@ export function Calibration({ art, onChange, onBatch }: any) {
     }
     const groups = [...(getProof(screen).groups || []).filter(g => g.kind === 'link'), ...panelGroupProofs(nextPanel).filter(g => !nextPanel.nodes.find(n=>n.id===g.id)?.importedGroup)]
     const next = { ...getProof(screen), approved:false, panel:nextPanel, layerStyles:styles, layerOrder:panelOrder(nextPanel), groups }
-    art.calibration = { ...art.calibration, enabled:false, proofs:{...art.calibration.proofs,[layoutFamily(screen)]:next} }; changed()
+    art.calibration = { ...art.calibration, enabled:outputMode?art.calibration.enabled:false, [storeName]:{...art.calibration[storeName],[proofKey(screen)]:next} }; changed()
   }
   function movementLocked(ids: string[]) {
     return ids.some(id => { const item=editorItems.find(i=>i.id===id), members=item?.memberIds || [id]; return [id,...members].some(key=>{const locks=effectiveLocks(panel,key);return locks.all||locks.position}) })
@@ -159,7 +164,7 @@ export function Calibration({ art, onChange, onBatch }: any) {
       return {...node,blendMode,opacity,fill:source?.fillOpacity??1}
     })
     const next={...getProof(screen),approved:false,layerStyles:styles,panel:{...panel,nodes}}
-    art.calibration={...art.calibration,enabled:false,proofs:{...art.calibration.proofs,[layoutFamily(screen)]:next}};changed()
+    art.calibration={...art.calibration,enabled:outputMode?art.calibration.enabled:false,[storeName]:{...art.calibration[storeName],[proofKey(screen)]:next}};changed()
   }
 
   const scaleTarget = special === 'background' ? { frame: { x: 0, y: 0, w: 1, h: 1 } } : special === 'border' && borderFrame ? { frame: borderFrame } : chosen
@@ -185,8 +190,8 @@ export function Calibration({ art, onChange, onBatch }: any) {
       if(target.vectorPdf&&action!=='border'){setSourceMessage('Checking embedded Illustrator vector source…');await verifyEmbeddedVector(target)}
       if(currentArt.current!==art)return
       beginAction(action === 'prepare' ? 'Prepare headline: border and words' : action === 'border' ? 'Rebuild vector border' : 'Split headline words')
-      if(action==='upgrade'){art.wordPieces=art.wordPieces.map(p=>p.parentId===target.id?{...p,vector:true,name:p.name.replace('· source pixels','· embedded vector')}:p);art.calibration={...art.calibration,enabled:false};art.calibration.proofs=Object.fromEntries(Object.entries(art.calibration.proofs).map(([family,p]:any)=>[family,{...p,panel:p.panel?{...p.panel,nodes:p.panel.nodes.map(n=>art.wordPieces.some(w=>w.parentId===target.id&&n.sourceIds.includes(w.id))?{...n,type:'vector',sourceKind:'vector-word',name:n.name.replace('· source pixels','· embedded vector')}:n)}:p.panel}]));setSourceMessage('Embedded Illustrator vector source enabled for these words. Preview and PNG export render it at the requested resolution.');changed();return}
-      const before = Object.fromEntries(Object.entries(art.calibration?.proofs || {}).map(([family, p]: any) => [family, { proof: p, layout: p.screen ? guideLayout(art, p.screen, p) : [] }]))
+      if(action==='upgrade'){art.wordPieces=art.wordPieces.map(p=>p.parentId===target.id?{...p,vector:true,name:p.name.replace('· source pixels','· embedded vector')}:p);art.calibration={...art.calibration,enabled:false};for(const bucket of ['proofs','outputs'])art.calibration[bucket]=Object.fromEntries(Object.entries(art.calibration[bucket]||{}).map(([family,p]:any)=>[family,{...p,panel:p.panel?{...p.panel,nodes:p.panel.nodes.map(n=>art.wordPieces.some(w=>w.parentId===target.id&&n.sourceIds.includes(w.id))?{...n,type:'vector',sourceKind:'vector-word',name:n.name.replace('· source pixels','· embedded vector')}:n)}:p.panel}]));setSourceMessage('Embedded Illustrator vector source enabled for these words. Preview and PNG export render it at the requested resolution.');changed();return}
+      const before = Object.fromEntries(['proofs','outputs'].flatMap(bucket=>Object.entries(art.calibration?.[bucket]||{}).map(([key,p]:any)=>[JSON.stringify([bucket,key]),{bucket,key,proof:p,layout:p.screen?guideLayout(art,p.screen,p):[]}])))
       let result
       if (action === 'prepare') {
         const role = art.an.roles.find(r => r.id === target.id)
@@ -201,9 +206,9 @@ export function Calibration({ art, onChange, onBatch }: any) {
         const frames = { ...state.proof.frames }, newUnits = contentUnits(art, state.proof.detachedSourceLinks).filter(u => u.layerIds.some(id => result.pieces.some(p => p.id === id)) || u.layerIds.length && u.layerIds.every(id => parent.layerIds.includes(id) && id !== target.id)), ids = newUnits.map(u => u.id)
         for (const unit of newUnits) frames[unit.id] = { x: parent.frame.x + (unit.box.x - parent.box.x) / parent.box.w * parent.frame.w, y: parent.frame.y + (unit.box.y - parent.box.y) / parent.box.h * parent.frame.h, w: unit.box.w / parent.box.w * parent.frame.w, h: unit.box.h / parent.box.h * parent.frame.h }
         const replace = (entries = []) => entries.flatMap(id => id === parent.id ? ids : [id])
-        art.calibration.proofs[family] = { ...state.proof, approved: false, frames, layerOrder: replace(state.proof.layerOrder), freeUnitIds: replace(state.proof.freeUnitIds), groups: (state.proof.groups || []).filter(g => !g.unitIds.includes(parent.id)) }
+        art.calibration[state.bucket][state.key] = { ...state.proof, approved: false, frames, layerOrder: replace(state.proof.layerOrder), freeUnitIds: replace(state.proof.freeUnitIds), groups: (state.proof.groups || []).filter(g => !g.unitIds.includes(parent.id)) }
       }
-      for(const [family,p] of Object.entries(art.calibration?.proofs || {}) as any)if(p.panel&&p.screen) { const updated=panelForArtwork(art,guideLayout(art,p.screen,p),p);art.calibration.proofs[family]={...p,panel:updated,layerOrder:panelOrder(updated)} }
+      for(const bucket of ['proofs','outputs'])for(const [family,p] of Object.entries(art.calibration?.[bucket] || {}) as any)if(p.panel&&p.screen) { const updated=panelForArtwork(art,guideLayout(art,p.screen,p),p);art.calibration[bucket][family]={...p,panel:updated,layerOrder:panelOrder(updated)} }
       art.calibration = { ...art.calibration, enabled: false }; setSourceMessage(result.message)
       if (result.pieces.length) setSelected(result.pieces.map(p => `word:${p.id}`))
       changed()
@@ -213,25 +218,25 @@ export function Calibration({ art, onChange, onBatch }: any) {
     if (movementLocked(['__border'])) return
     beginAction('Transform vector border')
     const next = { ...getProof(screen), approved: false, sourceSignature: signature, borderFrame: frame }
-    art.calibration = { ...art.calibration, enabled: false, proofs: { ...art.calibration.proofs, [layoutFamily(screen)]: next } }; changed()
+    art.calibration = { ...art.calibration, enabled: outputMode?art.calibration.enabled:false, [storeName]: { ...art.calibration[storeName], [proofKey(screen)]: next } }; changed()
   }
   function setBackground(patch: any) {
     if (movementLocked(['__background'])) return
     beginAction('Background transform')
     const next = { ...getProof(screen), approved: false, sourceSignature: signature, backgroundTransform: { scale: 100, x: 50, y: 50, ...getProof(screen).backgroundTransform, ...patch } }
-    art.calibration = { ...art.calibration, enabled: false, proofs: { ...art.calibration.proofs, [layoutFamily(screen)]: next } }; changed()
+    art.calibration = { ...art.calibration, enabled: outputMode?art.calibration.enabled:false, [storeName]: { ...art.calibration[storeName], [proofKey(screen)]: next } }; changed()
   }
   function open(s: any) {
     const saved = getProof(s), units: any[] = contentUnits(art, saved.detachedSourceLinks)
     let next = { ...saved, groups: (saved.groups || []).map(g => ({ ...g, unitIds: [...new Set(g.unitIds.flatMap(id => units.filter(u => u.id === id || u.legacyId === id).map(u => u.id)))] })) }
     next = { ...next, panel: panelForArtwork(art, guideLayout(art, s, next), next) }
-    art.calibration = { ...art.calibration, proofs: { ...art.calibration?.proofs, [layoutFamily(s)]: next } }
+    art.calibration = { ...art.calibration, [storeName]: { ...art.calibration?.[storeName], [proofKey(s)]: next } }
     setActive(s.name); setSpecial(null); setSelected(next.groups.find(g => g.unitIds.includes(units[0]?.id))?.kind === 'link' ? next.groups.find(g => g.unitIds.includes(units[0]?.id)).unitIds : [next.groups.find(g => g.unitIds.includes(units[0]?.id))?.id || units[0]?.id].filter(Boolean)); setZoom(1); changed()
   }
   function saveFrames(frames: any, groups = getProof(screen).groups, freeUnitIds = getProof(screen).freeUnitIds) {
     beginAction('Edit layout')
     const next = { ...getProof(screen), approved: false, sourceSignature: signature, frames, groups, freeUnitIds }
-    art.calibration = { ...art.calibration, enabled: false, proofs: { ...art.calibration?.proofs, [layoutFamily(screen)]: next } }; changed()
+    art.calibration = { ...art.calibration, enabled: outputMode?art.calibration.enabled:false, [storeName]: { ...art.calibration?.[storeName], [proofKey(screen)]: next } }; changed()
   }
   function transformItems(ids: string[], patch: any, sourceLayout = layout, sourceItems = editorItems) {
     if (!screen) return
@@ -259,11 +264,11 @@ export function Calibration({ art, onChange, onBatch }: any) {
     if (currentItems.length === 1 && currentItems[0].sourceLink) {
       beginAction('Unlink source layers')
       const item = currentItems[0], next = { ...proof, approved: false, detachedSourceLinks: [...new Set([...(proof.detachedSourceLinks || []), item.id])], frames: Object.fromEntries(layout.map(u => [u.id, u.frame])) }
-      art.calibration = { ...art.calibration, enabled: false, proofs: { ...art.calibration.proofs, [layoutFamily(screen)]: next } }; setSelected(item.layerIds.map(id => `layer:${id}`)); changed(); return
+      art.calibration = { ...art.calibration, enabled: outputMode?art.calibration.enabled:false, [storeName]: { ...art.calibration[storeName], [proofKey(screen)]: next } }; setSelected(item.layerIds.map(id => `layer:${id}`)); changed(); return
     }
     const groups = (proof.groups || []).filter(g => !selected.includes(g.id) && !(g.kind === 'link' && g.unitIds.some(id => selected.includes(id)))), ids = currentItems.flatMap(i => i.memberIds)
     const removed=panel.nodes.filter(n=>n.type==='group'&&selected.includes(n.id)), removedIds=new Set(removed.map(n=>n.id))
-    if(removed.length){const nextPanel={...panel,nodes:panel.nodes.filter(n=>!removedIds.has(n.id)).map(n=>removedIds.has(n.parentId)?{...n,parentId:removed.find(p=>p.id===n.parentId)?.parentId||null}:n)};art.calibration.proofs[layoutFamily(screen)]={...proof,panel:nextPanel,layerOrder:panelOrder(nextPanel)}}
+    if(removed.length){const nextPanel={...panel,nodes:panel.nodes.filter(n=>!removedIds.has(n.id)).map(n=>removedIds.has(n.parentId)?{...n,parentId:removed.find(p=>p.id===n.parentId)?.parentId||null}:n)};art.calibration[storeName][proofKey(screen)]={...proof,panel:nextPanel,layerOrder:panelOrder(nextPanel)}}
     saveFrames(Object.fromEntries(layout.map(u => [u.id, u.frame])), groups); setSelected(ids)
   }
   function arrange(action: string) {
@@ -287,12 +292,12 @@ export function Calibration({ art, onChange, onBatch }: any) {
   function approve() {
     beginAction('Approve guide')
     if (!screen || issues.some(i => i.blocked)) return
-    art.calibration = { ...art.calibration, enabled: false, proofs: { ...art.calibration.proofs, [layoutFamily(screen)]: { ...getProof(screen), approved: true, sourceSignature: signature } } }; changed()
+    art.calibration = { ...art.calibration, enabled: outputMode?art.calibration.enabled:false, [storeName]: { ...art.calibration[storeName], [proofKey(screen)]: { ...getProof(screen), approved: true, sourceSignature: signature } } }; changed()
   }
   function reset() {
     beginAction('Reset layout')
     if (!screen) return
-    art.calibration = { ...art.calibration, enabled: false, proofs: { ...art.calibration.proofs, [layoutFamily(screen)]: initialProof(art, screen) } }; changed()
+    art.calibration = { ...art.calibration, enabled: outputMode?art.calibration.enabled:false, [storeName]: { ...art.calibration[storeName], [proofKey(screen)]: outputMode?createScreenProof(art,screen):initialProof(art, screen) } }; changed()
   }
   function applyGuides() {
     beginAction('Enable batch guides')
@@ -302,7 +307,7 @@ export function Calibration({ art, onChange, onBatch }: any) {
   function trapKeys(event: React.KeyboardEvent) {
     if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'z' && !(event.target instanceof HTMLInputElement || event.target instanceof HTMLSelectElement || event.target instanceof HTMLTextAreaElement)) { event.preventDefault(); travel(event.shiftKey ? 'redo' : 'undo'); return }
     if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'y' && !(event.target instanceof HTMLInputElement)) { event.preventDefault(); travel('redo'); return }
-    if (event.key === 'Escape') { setActive(null); return }
+    if (event.key === 'Escape') { closeEditor(); return }
     if (!(event.target instanceof HTMLInputElement || event.target instanceof HTMLSelectElement || event.target instanceof HTMLTextAreaElement) && !event.ctrlKey && !event.metaKey && !event.altKey) {
       if (screen && ['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(event.key)) {
         event.preventDefault(); const step = event.shiftKey ? 10 : 1, dx = event.key === 'ArrowLeft' ? -step : event.key === 'ArrowRight' ? step : 0, dy = event.key === 'ArrowUp' ? -step : event.key === 'ArrowDown' ? step : 0
@@ -319,8 +324,8 @@ export function Calibration({ art, onChange, onBatch }: any) {
     if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last?.focus() }
     if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first?.focus() }
   }
-  return <section className="calibration" aria-label="Five calibration previews">
-    <div className="calibration-heading"><div><h2>Calibrate five layouts first</h2><p>Double-click a preview to edit it full screen. Linked layers move together. Approve each guide before batch adaptation.</p></div><span>{approvedCount} / {FAMILIES.length} guides approved</span></div>
+  return <section className={outputMode?'output-refinement':'calibration'} aria-label={outputMode?'Adaptation refinement':'Five calibration previews'}>
+    {!outputMode&&<><div className="calibration-heading"><div><h2>Calibrate five layouts first</h2><p>Double-click a preview to edit it full screen. Linked layers move together. Approve each guide before batch adaptation.</p></div><span>{approvedCount} / {FAMILIES.length} guides approved</span></div>
     <div className="calibration-gallery">{PRESETS.map(s => {
       const p = getProof(s), approved = p.approved && p.sourceSignature === signature
       return <article className="calibration-card" key={s.name}>
@@ -329,9 +334,9 @@ export function Calibration({ art, onChange, onBatch }: any) {
         <button type="button" className="ghost" onClick={() => open(s)}>Edit {s.name}</button>
       </article>
     })}</div>
-    <div className="calibration-batch"><p>Guides belong to this master. Source, visibility, links, tags or edge changes require guide review again.</p><button type="button" disabled={approvedCount !== FAMILIES.length} onClick={applyGuides}>Use these guides for full adaptation</button></div>
+    <div className="calibration-batch"><p>Guides belong to this master. Source, visibility, links, tags or edge changes require guide review again.</p><button type="button" disabled={approvedCount !== FAMILIES.length} onClick={applyGuides}>Use these guides for full adaptation</button></div></>}
     {active && screen && <div className="calibration-focus" ref={dialog} role="dialog" aria-modal="true" aria-label={`Edit ${screen.name}`} onKeyDown={trapKeys} onFocusCapture={e => { if (e.target instanceof HTMLInputElement) historyGesture.current = { recorded: false } }} onBlurCapture={e => { if (e.target instanceof HTMLInputElement) historyGesture.current = null }}>
-      <header><button type="button" className="ghost" onClick={() => setActive(null)}>← Back to five previews</button><strong>{screen.name} · {screen.w} × {screen.h}</strong><button type="button" className="ghost" disabled={!history.past.length} onClick={() => travel('undo')}>Undo</button><button type="button" className="ghost" disabled={!history.future.length} onClick={() => travel('redo')}>Redo</button><span className="spacer" /><label>Zoom<select aria-label="Calibration zoom" value={zoom} onChange={e => setZoom(Number(e.target.value))}><option value={1}>Fit</option><option value={2}>200%</option><option value={3}>300%</option></select></label><button type="button" disabled={issues.some(i => i.blocked)} onClick={approve}>{proof.approved && proof.sourceSignature === signature ? 'Guide approved' : 'Approve this guide'}</button></header>
+      <header><button type="button" className="ghost" onClick={closeEditor}>{outputMode?'← Back to adaptations':'← Back to five previews'}</button><strong>{screen.name} · {screen.w} × {screen.h}{outputMode?` · ${art.lang}`:''}</strong><button type="button" className="ghost" disabled={!canTravel('undo')} onClick={() => travel('undo')}>Undo</button><button type="button" className="ghost" disabled={!canTravel('redo')} onClick={() => travel('redo')}>Redo</button><span className="spacer" /><label>Zoom<select aria-label="Calibration zoom" value={zoom} onChange={e => setZoom(Number(e.target.value))}><option value={1}>Fit</option><option value={2}>200%</option><option value={3}>300%</option></select></label><button type="button" disabled={issues.some(i => i.blocked)} onClick={approve}>{proof.approved && proof.sourceSignature === signature ? (outputMode?'Adaptation approved':'Guide approved') : (outputMode?'Approve this adaptation':'Approve this guide')}</button></header>
       <div className="calibration-edit-layout" style={{'--inspector-width': `${art.previewSettings?.layerThumbnailSize === 300 ? 440 : art.previewSettings?.layerThumbnailSize === 200 ? 380 : 340}px`} as React.CSSProperties}><div className="calibration-stage-area"><div className="editor-toolbox" role="toolbar" aria-label="Editing tools"><button type="button" aria-pressed={tool === 'move'} onClick={() => setTool('move')}>Move <kbd>V</kbd></button><button type="button" aria-pressed={tool === 'scale'} onClick={() => setTool('scale')}>Scale <kbd>S</kbd></button><span>{tool === 'scale' ? 'Drag a handle to scale around the chosen anchor' : 'Inside box: move · Edge handles: scale'}</span></div><div className="calibration-stage"><div className="calibration-canvas-frame" ref={canvasHost} onPointerDown={event => {
           if (event.button !== 0 || (event.target as HTMLElement).closest('.scale-handle')) return
           historyGesture.current = { recorded: false }
@@ -392,7 +397,7 @@ export function Calibration({ art, onChange, onBatch }: any) {
         </div>
 
         {special === 'background' && <div className="special-layer-inspector"><h3>Original background</h3><p>{art.backgroundRegion ? `Selected texture: ${art.backgroundRegion.w} × ${art.backgroundRegion.h} px at ${art.backgroundRegion.x}, ${art.backgroundRegion.y}` : 'Uses the tagged original background. Draw a safe texture area in Analyse to change the material used for extension.'}</p><label>Background scale (%)<input type="number" min={1} max={800} step={5} value={proof.backgroundTransform?.scale ?? 100} onChange={e => setBackground({ scale: Math.max(1, Math.min(800, Number(e.target.value))) })} /></label><label>Background horizontal position (%)<input type="range" min={0} max={100} value={proof.backgroundTransform?.x ?? 50} onChange={e => setBackground({ x: Number(e.target.value) })} /></label><label>Background vertical position (%)<input type="range" min={0} max={100} value={proof.backgroundTransform?.y ?? 50} onChange={e => setBackground({ y: Number(e.target.value) })} /></label><label>Background X offset (%)<input type="number" step={1} value={proof.backgroundTransform?.offsetX ?? 0} onChange={e => setBackground({ offsetX: Number(e.target.value) })} /></label><label>Background Y offset (%)<input type="number" step={1} value={proof.backgroundTransform?.offsetY ?? 0} onChange={e => setBackground({ offsetY: Number(e.target.value) })} /></label><button type="button" className="ghost" onClick={() => setBackground({ scale: 100, x: 50, y: 50, offsetX: 0, offsetY: 0 })}>Reset background transform</button><p>Move and scale freely, including beyond canvas edges. 100% covers the canvas; smaller sizes or offsets can expose transparency. Applies only to this layout. Full source bounds and texture selection are in Analyse.</p></div>}
-        {special === 'border' && <div className="special-layer-inspector"><h3>Vector border</h3>{borderFrame && <>{[['x','Border X (%)'],['y','Border Y (%)'],['w','Border width (%)'],['h','Border height (%)']].map(([key,label]) => <label key={key}>{label}<input type="number" step={.5} min={key === 'w' || key === 'h' ? .1 : undefined} value={+(borderFrame[key] * 100).toFixed(2)} onChange={e => setBorderFrame({ ...borderFrame, [key]: key === 'w' || key === 'h' ? Math.max(.001, Number(e.target.value) / 100) : Number(e.target.value) / 100 })} /></label>)}<button type="button" className="ghost" onClick={() => { beginAction('Reset adaptive border'); const next = { ...getProof(screen), approved: false }; delete next.borderFrame; art.calibration = { ...art.calibration, enabled: false, proofs: { ...art.calibration.proofs, [layoutFamily(screen)]: next } }; changed() }}>Reset adaptive border</button></>}<label>Border thickness (this layout, source px)<input type="number" min={1} max={40} value={proof.borderThickness ?? art.originalBorder.thickness} onChange={e => { beginAction('Border thickness'); const next = { ...proof, borderThickness: Math.max(1, Math.min(40, Number(e.target.value))), approved: false }; art.calibration = { ...art.calibration, enabled: false, proofs: { ...art.calibration.proofs, [layoutFamily(screen)]: next } }; changed() }} /></label><p>Reconstructed from your traced source border. Drag inside its box to move, or use its handles to scale. Manual changes apply to this guide; Reset restores the screen/stamp frame. Thickness scales with the short side.</p></div>}
+        {special === 'border' && <div className="special-layer-inspector"><h3>Vector border</h3>{borderFrame && <>{[['x','Border X (%)'],['y','Border Y (%)'],['w','Border width (%)'],['h','Border height (%)']].map(([key,label]) => <label key={key}>{label}<input type="number" step={.5} min={key === 'w' || key === 'h' ? .1 : undefined} value={+(borderFrame[key] * 100).toFixed(2)} onChange={e => setBorderFrame({ ...borderFrame, [key]: key === 'w' || key === 'h' ? Math.max(.001, Number(e.target.value) / 100) : Number(e.target.value) / 100 })} /></label>)}<button type="button" className="ghost" onClick={() => { beginAction('Reset adaptive border'); const next = { ...getProof(screen), approved: false }; delete next.borderFrame; art.calibration = { ...art.calibration, enabled: outputMode?art.calibration.enabled:false, [storeName]: { ...art.calibration[storeName], [proofKey(screen)]: next } }; changed() }}>Reset adaptive border</button></>}<label>Border thickness (this layout, source px)<input type="number" min={1} max={40} value={proof.borderThickness ?? art.originalBorder.thickness} onChange={e => { beginAction('Border thickness'); const next = { ...proof, borderThickness: Math.max(1, Math.min(40, Number(e.target.value))), approved: false }; art.calibration = { ...art.calibration, enabled: outputMode?art.calibration.enabled:false, [storeName]: { ...art.calibration[storeName], [proofKey(screen)]: next } }; changed() }} /></label><p>Reconstructed from your traced source border. Drag inside its box to move, or use its handles to scale. Manual changes apply to this guide; Reset restores the screen/stamp frame. Thickness scales with the short side.</p></div>}
         {!special && <><h3 className="transform-heading">Transform</h3><fieldset className="scale-anchor"><legend>Scale anchor point</legend><div role="group" aria-label="Scale anchor point">{ANCHORS.map((point, index) => <button key={point.name} type="button" aria-label={`Anchor ${point.name.toLowerCase()}`} aria-pressed={anchorIndex === index} onClick={() => setAnchorIndex(index)} title={point.name}>•</button>)}</div><small>{anchor.name} stays fixed during scaling. Manual transforms override placement anchors for this layout.</small></fieldset>
         {chosen && <><label>X position (%)<input type="number" step={.5} disabled={movementLocked(currentItems.map(i=>i.id))} value={+(chosen.frame.x * 100).toFixed(2)} onChange={e => changeFrame(chosen.id, { x: Number(e.target.value) / 100 })} /></label><label>Y position (%)<input type="number" step={.5} disabled={movementLocked(currentItems.map(i=>i.id))} value={+(chosen.frame.y * 100).toFixed(2)} onChange={e => changeFrame(chosen.id, { y: Number(e.target.value) / 100 })} /></label><label>Width (%)<input type="number" min={1} max={1000} step={.5} disabled={movementLocked(currentItems.map(i=>i.id))} value={+(chosen.frame.w * 100).toFixed(2)} onChange={e => resize(Number(e.target.value) / 100)} /></label><p>{chosen.layerIds.length} source layer(s) · proportional scaling · {chosen.constraint.anchor && chosen.constraint.anchor !== 'free' ? `Anchored: ${chosen.constraint.anchor}` : 'Free placement'}</p></>}
         <div className="editor-arrangement"><span>{currentItems.length} selected</span><button type="button" className="ghost" disabled={currentItems.length < 2 || layout.filter(u => currentItems.some(i => i.memberIds.includes(u.id))).some(u => u.constraint.anchor && u.constraint.anchor !== 'free')} onClick={() => groupSelected()}>Group selected elements</button><button type="button" className="ghost" disabled={!(proof.groups || []).some(g => selected.includes(g.id))} onClick={ungroupSelected}>Ungroup selected elements</button><label>Align relative to<select aria-label="Alignment reference" value={alignReference} onChange={e => setAlignReference(e.target.value)}><option value="selection">Selection bounds</option><option value="canvas">Composition (safe area)</option></select></label><div className="alignment-buttons">{[['left','Left'],['center-x','Horizontal center'],['right','Right'],['top','Top'],['center-y','Vertical center'],['bottom','Bottom'],['distribute-x','Distribute horizontally'],['distribute-y','Distribute vertically']].map(([id,label])=><button type="button" className="ghost" key={id} disabled={!currentItems.length || (id.startsWith('distribute') ? currentItems.length < 3 : alignReference === 'selection' && currentItems.length < 2)} onClick={()=>arrange(id)}>{label}</button>)}</div><small>Edge anchors take precedence. Clear anchors in Analyse before grouping freely moving elements.</small></div>

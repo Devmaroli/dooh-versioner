@@ -12,7 +12,7 @@ import { backgroundCrop, backgroundFrame } from '../background.js'
 import { pickForeground } from '../picking.js'
 import { drawOriginalBorder, borderGeometry } from '../border.js'
 import { allLayers, drawSourceLayers } from '../artwork.js'
-import { layoutFamily, calibrationReady, guideLayout, guideFindings, sourceSignature } from '../layoutGuides.js'
+import { proofForScreen, screenProofKey, layoutFamily, calibrationReady, guideLayout, guideFindings, sourceSignature } from '../layoutGuides.js'
 import { readPsd } from 'ag-psd'
 import { PRESET_FILES, SAMPLE_PSD_B64, SAMPLE_SVG } from './presets.js'
 
@@ -301,7 +301,7 @@ function badge(P,d){if(d.rule){const e=document.createElement("span");e.classNam
   e.onclick=ev=>{ev.stopPropagation();toggleAI(k,d.id,d.label);};return e;}
 function tileCanvas(row,s,maxW,maxH){const q=Math.min(maxW/s.w,maxH/s.h),dpr=window.devicePixelRatio||1,c=document.createElement("canvas");
   c.width=Math.max(1,Math.round(s.w*q*dpr));c.height=Math.max(1,Math.round(s.h*q*dpr));c.style.width=s.w*q+"px";c.style.height=s.h*q+"px";
-  const ctx=c.getContext("2d");ctx.scale(q*dpr,q*dpr);const P=draw(ctx,row,s);return {c,P};}
+  const ctx=c.getContext("2d");ctx.scale(q*dpr,q*dpr);const P=draw(ctx,row,s),master=masterFor(s,row);const ready=master&&calibrationReady(master)?prepareVectorLayout(master,s,proofForScreen(master,s),q*dpr,q*dpr).then(()=>{ctx.clearRect(0,0,s.w,s.h);draw(ctx,row,s)}):Promise.resolve();return {c,P,ready};}
 
 let ARTS=[],ACT=0;
 function psdFromBuf(buf,file){const p=readPsd(new Uint8Array(buf),{skipLayerImageData:false,skipThumbnail:true,skipCompositeImageData:false});bakeOverlays(p.children);const a=Adapt.fromAgPsd(p,file);if(p.canvas)Object.defineProperty(a,"composite",{value:p.canvas,enumerable:false});return a;}
@@ -414,7 +414,10 @@ export async function renderFull(row, screen) {
   const master=masterFor(screen,row)
   if(!master)throw new Error('No '+row.lang+' master is assigned. Import or assign a matching master.')
   if(!calibrationReady(master))throw new Error('Approve all five calibration guides before batch export.')
-  await prepareVectorLayout(master,screen,master.calibration?.proofs?.[layoutFamily(screen)])
+  const output=master.calibration?.outputs?.[screenProofKey(screen)]
+  if(output&&(!output.approved||output.sourceSignature!==sourceSignature(master)))throw new Error(screen.name+': approve this refined adaptation before exporting.')
+  if(output&&guideFindings(master,screen,guideLayout(master,screen,output),output).some(i=>i.blocked))throw new Error(screen.name+': resolve blocking findings before exporting.')
+  await prepareVectorLayout(master,screen,proofForScreen(master,screen))
   const c=document.createElement('canvas');c.width=screen.w;c.height=screen.h
   master.requireVector=true
   try{draw(c.getContext('2d'),row,screen)}finally{delete master.requireVector}
@@ -433,7 +436,7 @@ export async function prepareVectorLayout(art,screen,proof,pixelScale=1,pixelSca
   }
 }
 function drawGuided(ctx,art,screen,proof){
-  const layout=guideLayout(art,screen,proof),issues=guideFindings(art,screen,layout),background=art.a.source?.format==='image'?null:bgInfo(art),sources=allLayers(art),current=proof || art.calibration?.proofs?.[layoutFamily(screen)];
+  const current=proof||proofForScreen(art,screen),layout=guideLayout(art,screen,current),issues=guideFindings(art,screen,layout,current),background=art.a.source?.format==='image'?null:bgInfo(art),sources=allLayers(art);
   const signature=sourceSignature(art);
   if(art.GU?.signature!==signature)art.GU={signature,units:{}};
   art.PA=art.PA||new Map();
