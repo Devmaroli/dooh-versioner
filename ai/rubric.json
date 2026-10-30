@@ -1,0 +1,361 @@
+{
+ "version": 1,
+ "weights": {
+  "hierarchy": 0.18,
+  "legibility": 0.22,
+  "fill": 0.14,
+  "balance": 0.12,
+  "gaps": 0.14,
+  "brand": 0.1,
+  "rtl": 0.1
+ },
+ "passTotal": 70,
+ "perClass": {
+  "xw": {
+   "axis": "x",
+   "fill": [
+    0.35,
+    0.8
+   ],
+   "hierarchy": 1.6,
+   "minHeadlinePct": 0.3,
+   "minOfferPct": 0.14,
+   "kashida": true,
+   "gapU": 3,
+   "opticalLift": 0
+  },
+  "uw": {
+   "axis": "x",
+   "fill": [
+    0.35,
+    0.8
+   ],
+   "hierarchy": 1.6,
+   "minHeadlinePct": 0.18,
+   "minOfferPct": 0.08,
+   "kashida": true,
+   "gapU": 2.5,
+   "opticalLift": 0
+  },
+  "h": {
+   "axis": "x",
+   "fill": [
+    0.35,
+    0.8
+   ],
+   "hierarchy": 1.7,
+   "minHeadlinePct": 0.09,
+   "minOfferPct": 0.04,
+   "kashida": true,
+   "gapU": 2,
+   "opticalLift": 0.02
+  },
+  "sq": {
+   "axis": "y",
+   "fill": [
+    0.35,
+    0.8
+   ],
+   "hierarchy": 1.7,
+   "minHeadlinePct": 0.08,
+   "minOfferPct": 0.035,
+   "kashida": false,
+   "gapU": 1.5,
+   "opticalLift": 0.02
+  },
+  "v": {
+   "axis": "y",
+   "fill": [
+    0.35,
+    0.8
+   ],
+   "hierarchy": 1.8,
+   "minHeadlinePct": 0.1,
+   "minOfferPct": 0.045,
+   "kashida": false,
+   "gapU": 1.5,
+   "opticalLift": 0.02
+  },
+  "uv": {
+   "axis": "y",
+   "fill": [
+    0.35,
+    0.8
+   ],
+   "hierarchy": 1.8,
+   "minHeadlinePct": 0.14,
+   "minOfferPct": 0.06,
+   "kashida": false,
+   "gapU": 1.5,
+   "opticalLift": 0.01
+  },
+  "xv": {
+   "axis": "y",
+   "fill": [
+    0.45,
+    0.85
+   ],
+   "hierarchy": 1.8,
+   "minHeadlinePct": 0.16,
+   "minOfferPct": 0.07,
+   "kashida": false,
+   "gapU": 1.5,
+   "opticalLift": 0
+  }
+ },
+ "spacingUnit": {
+  "U": "0.25*headlineFont, min 8px",
+  "headSub": 1.2,
+  "stack": 3,
+  "zones": 2,
+  "logoHeadline": "max(6U, logoH)",
+  "textHero": "0.5H",
+  "kashida": "1-line AR headline on xw/uw/h only, max 3/word"
+ },
+ "productGapDefault": 0.02,
+ "fillMetric": "union coverage of content rects / safe area (96x96 raster)",
+ "kashidaMaxPerWord": 3,
+ "ctaGap": "same as productGap",
+ "routing": {
+  "threshold": 0.8,
+  "above": "auto-apply with badge",
+  "below": "review queue",
+  "none": "local rules"
+ },
+ "audit": {
+  "criteria": 19,
+  "pass": 80,
+  "u": "1% short side",
+  "scale": [
+   1,
+   2,
+   3,
+   4,
+   6,
+   8,
+   12
+  ],
+  "marginU": 6,
+  "marginUExtreme": 8,
+  "clearU": 2,
+  "proximity": "inner<=0.5*between",
+  "contrast": {
+   "large": 3,
+   "body": 4.5
+  },
+  "fill": [
+   0.35,
+   0.8
+  ],
+  "leading": {
+   "latin": [
+    1.05,
+    1.2
+   ],
+   "arabic": [
+    1.3,
+    1.6
+   ]
+  },
+  "wordsPerLine": [
+   2,
+   6
+  ],
+  "maxTypefaces": 2,
+  "kashidaMax": 3,
+  "consistencyCV": 0.25
+ },
+ "adaptationSkill": {
+  "ribbon": {
+   "headlineLines": {
+    "xw": 1,
+    "uw": 2
+   },
+   "capPctOfHeight": [
+    0.4,
+    0.5
+   ],
+   "keyMessage": "central third",
+   "marginPctOfHeight": [
+    0.08,
+    0.1
+   ]
+  },
+  "tallColumn": {
+   "zones": {
+    "brand": [
+     0,
+     0.2
+    ],
+    "heroHeadline": [
+     0.2,
+     0.7
+    ],
+    "ctaLegal": [
+     0.75,
+     1
+    ]
+   },
+   "avoidEdgePct": 0.03,
+   "marginPctOfWidth": [
+    0.08,
+    0.1
+   ]
+  },
+  "rtlZoneOrder": "mirror",
+  "neverMirror": [
+   "logo",
+   "product",
+   "price",
+   "url",
+   "phone",
+   "numerals"
+  ],
+  "arabicTracking": 0,
+  "numerals": "consistent per version",
+  "priceUnbroken": true,
+  "lineCountParity": "where possible",
+  "seamClearU": 2,
+  "whiteMaxPct": 0.15,
+  "textWhite": "#F5F5F5",
+  "bgExtendOrder": [
+   "reposition",
+   "edge-stretch/mirror",
+   "colour/gradient field",
+   "cutout on field",
+   "ai-outpaint (opt-in, @bg.ai)"
+  ],
+  "leadingAr": [
+   1.3,
+   1.5
+  ]
+ },
+ "refZones": {
+  "xv": {
+   "logo": [
+    0.019,
+    0.049
+   ],
+   "headline": [
+    0.263,
+    0.404
+   ],
+   "product": [
+    0.404,
+    0.657
+   ],
+   "offer": [
+    0.657,
+    0.732
+   ],
+   "cta": [
+    0.741,
+    0.863
+   ],
+   "legal": [
+    0.901,
+    0.976
+   ],
+   "focal": 0.526,
+   "eyeLevel": [
+    0.3,
+    0.6
+   ]
+  },
+  "xw": {
+   "logo": [
+    0.007,
+    0.096
+   ],
+   "headline": [
+    0.135,
+    0.561
+   ],
+   "product": [
+    0.583,
+    0.83
+   ],
+   "cta": [
+    0.852,
+    0.993
+   ],
+   "capPct": [
+    0.4,
+    0.5
+   ],
+   "logoMaxHPct": 0.53
+  },
+  "uw": {
+   "logo": [
+    0.012,
+    0.104
+   ],
+   "headline": [
+    0.13,
+    0.547
+   ],
+   "product": [
+    0.56,
+    0.82
+   ],
+   "cta": [
+    0.833,
+    0.988
+   ],
+   "minZoneGapPctW": 0.013
+  },
+  "rtl": "x' = 1 - x (positions only)",
+  "tolerance": 0.04,
+  "arabicSizeTarget": [
+   1.1,
+   1.15
+  ],
+  "arabicSizeMin": 0.9
+ },
+ "layoutLibrary": {
+  "lookup": "name>size>class",
+  "classMap": {
+   "Ribbon": [
+    "xw",
+    "uw"
+   ],
+   "Wide": [
+    "uw",
+    "h"
+   ],
+   "Square": [
+    "h",
+    "sq",
+    "v"
+   ],
+   "Portrait": [
+    "v",
+    "uv"
+   ],
+   "Tall": [
+    "uv",
+    "xv"
+   ]
+  },
+  "precedence": "artwork > library > class template"
+ },
+ "artworkInference": {
+  "rules": [
+   "logoAspect",
+   "wideLockup",
+   "lockKV",
+   "heroUnit",
+   "productAspect",
+   "fullBleed",
+   "artStyle",
+   "protect",
+   "brandColor",
+   "headlineMaxLines",
+   "focal",
+   "masterComposition",
+   "fonts"
+  ],
+  "editable": true,
+  "rolesNeedConfirmation": true
+ }
+}

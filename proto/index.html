@@ -1,0 +1,517 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>DOOH Versioner — prototype v1.1</title>
+<style>
+*{box-sizing:border-box}body{margin:0;font:13px system-ui,sans-serif;background:#1b1b1d;color:#ddd}
+header{display:flex;gap:12px;align-items:center;padding:8px 16px;background:#111;border-bottom:1px solid #333;height:46px}
+header b{color:#fff;font-size:15px}.tag{background:#2448f5;color:#fff;border-radius:4px;padding:2px 6px;font-size:11px}
+main{display:grid;grid-template-columns:320px 1fr 330px;height:calc(100vh - 46px)}
+aside{background:#232326;padding:10px 12px;overflow:auto;border-right:1px solid #333}#stack{border-left:1px solid #333;border-right:0}
+h3{font-size:11px;text-transform:uppercase;color:#999;margin:12px 0 6px}
+table{width:100%;border-collapse:collapse}td,th{border:1px solid #3a3a3e;padding:2px}th{font-size:11px;color:#aaa;background:#2a2a2e}
+td input{width:100%;background:#1b1b1d;color:#eee;border:0;padding:4px;font:inherit}
+.note{color:#e0a040;font-size:11px}.small{font-size:11px;color:#999}
+pre{background:#1b1b1d;padding:6px;font-size:11px;white-space:pre-wrap;margin:0}
+#grid{padding:14px;overflow:auto;display:flex;flex-wrap:wrap;gap:16px;align-content:flex-start;align-items:flex-start}
+.pair{border:1px solid #333;border-radius:8px;padding:6px;background:#15171c}.pair.sel{outline:2px solid #2448f5}.ph{font-size:12px;margin:0 4px 4px;display:flex;gap:6px;align-items:center;flex-wrap:wrap}.pb{display:flex;gap:8px}.pair.stack .pb{flex-direction:column}
+.lt{font-size:10px;font-weight:700;background:#2448f5;color:#fff;border-radius:3px;padding:0 4px}.mb{font-size:10px;border:1px solid #6a6;color:#9fe3b8;border-radius:3px;padding:0 4px}.mb.ov{border-color:#f90;color:#fc6}
+.mrow{display:flex;gap:6px;align-items:center;margin:3px 0;padding:3px;border-radius:4px;cursor:pointer}.mrow.act{background:#223}.mrow canvas,.mrow img{width:44px;height:44px;object-fit:contain;background:#000;border:1px solid #444}
+#fv{position:fixed;inset:0;background:rgba(5,6,10,.94);z-index:99;display:none;flex-direction:column;color:#eee}#fv.on{display:flex}#fvh{padding:8px 14px;font-size:13px;display:flex;gap:10px;align-items:center;flex-wrap:wrap;border-bottom:1px solid #333}#fvb{flex:1;overflow:hidden;position:relative;cursor:grab}#fvs{position:absolute;left:0;top:0;transform-origin:0 0;display:flex;gap:24px}#fvs canvas{box-shadow:0 0 0 1px #555;image-rendering:pixelated}#fvs.stack{flex-direction:column}.fvf{color:#ffb89a;font-size:12px}
+#drop{position:fixed;inset:0;border:4px dashed #2448f5;background:rgba(36,72,245,.12);z-index:98;display:none;align-items:center;justify-content:center;font-size:22px;color:#fff;pointer-events:none}
+.cell{padding:4px;border-radius:6px;cursor:pointer}.cell.sel{outline:2px solid #2448f5}.cell canvas{display:block;box-shadow:0 0 0 1px #444}
+.lab{font-size:11px;color:#aaa;margin-top:4px;max-width:360px}.badges{display:flex;gap:4px;flex-wrap:wrap;margin-top:3px}
+.b{border-radius:10px;padding:1px 7px;font-size:10px;border:1px solid #7a5cff;color:#cbb8ff;background:#2a2340;cursor:pointer;user-select:none}
+.b.off{border-color:#555;color:#777;background:#222;text-decoration:line-through}.b.qa{border-color:#2f9e5a;color:#9fe3b8;background:#17301f}.b.qa.bad{border-color:#c0603a;color:#ffb89a;background:#341d15}
+.b.man{border-color:#e0a040;color:#ffd590;background:#33280f}
+button{background:#2448f5;color:#fff;border:0;border-radius:4px;padding:3px 8px;cursor:pointer;font-size:11px}button.g{background:#3a3a3e}
+input.s{width:100%;background:#1b1b1d;color:#eee;border:1px solid #444;padding:4px}
+#sizes{max-height:230px;overflow:auto;border:1px solid #333;padding:4px}.sz{display:flex;gap:5px;align-items:center;padding:2px 0;font-size:12px}
+.lay{border:1px solid #3a3a3e;border-radius:6px;padding:6px;margin-bottom:6px}.lay h4{margin:0 0 4px;font-size:12px;color:#fff;display:flex;justify-content:space-between}
+.row{display:flex;justify-content:space-between;align-items:center;gap:6px;padding:2px 0;font-size:12px}
+#hist div{font-size:11px;color:#aaa;border-bottom:1px solid #2e2e32;padding:2px 0}
+dialog{background:#232326;color:#ddd;border:1px solid #555;border-radius:8px;width:640px}dialog select,dialog input{background:#1b1b1d;color:#eee;border:1px solid #444;padding:3px}
+</style></head><body>
+<header><b>DOOH Versioner</b><span class="tag">prototype v1.5</span><span class="small">Engine: engine/adapt.ts · sizes imported from M2R preset files · non-destructive stack</span><span style="flex:1"></span><button id="provBtn" class="g">AI providers…</button><button id="undo" class="g">Undo</button><button id="exportAll">Export all PNGs</button></header>
+<main><aside>
+<h3>Master design 1920×1080 (source, read-only)</h3><pre id="layers"></pre>
+<h3>Import master artwork (inference overrides templates)</h3>
+<input type=file id=artFile multiple accept=".psd,.psb,.svg,.pdf,.ai,.json,.pcraft,.vectorcraft,.png,.jpg,.jpeg,.webp" class=s><div class=small>One campaign, several master sizes: pick or drop several files. Each screen uses the master with the closest ratio.</div><div id=artList></div><div style="display:flex;gap:4px;margin-top:4px"><button id=artPsd class=g>Load sample PSD</button><button id=artSvg class=g>Load sample SVG</button><button id=artOff class=g>Clear</button></div>
+<div id=artBox class=small>No artwork imported: template + library defaults apply.</div>
+<h3>Screen presets (M2R files)</h3>
+<input class="s" id="q" placeholder="Search name or group… (e.g. Marina, 384)"><div class="small" id="presetInfo"></div><div id="sizes"></div>
+<h3>Paste screens (like Screen Manager)</h3>
+<textarea id="paste" class="s" rows="5" placeholder="One per line, or , ; separated — names and/or WxH, e.g.&#10;1. Boulevard Bridge&#10;Thuraya Combined&#10;1008x5184&#10;Mystery Mall	1234 x 567"></textarea>
+<div style="margin-top:4px;display:flex;gap:4px"><button id="pasteGo">Select pasted</button><button id="pasteClr" class="g">Clear</button><button id="adaptAll" class="g">Adapt all ticked</button></div>
+<div class="small" id="pasteStatus">Replaces the current selection (same as Screen Manager).</div><div id="unmatched"></div>
+<h3>Text ↔ product</h3><div class=row>Gap (% of short side) <input type=number id=gap min=0 max=10 step=0.5 value=2 style="width:60px" class=s></div>
+<div id=ovl class=small></div><div class=small>Text never overlaps the product: the engine moves, then shrinks, the text block. Tick a layer only to allow overlap on purpose (same as tagging it <code>.overlap</code>).</div>
+<h3>Data sheet (1 row = 1 version)</h3><table id="sheet"></table>
+<h3>AI (auto-applied, each with a badge)</h3>
+<div class="small">Click a badge under a tile to accept ⇄ revert it. Click a tile to open its stack on the right.<br><span class="note">Word-split + auto-tag + QA here are rule-based stand-ins for the AI (labelled “heuristic”). Saliency is a browser stand-in for ONNX.</span></div>
+</aside><section id="grid"></section><div id=fv><div id=fvh></div><div id=fvb><div id=fvs></div></div></div><div id=drop>Drop master artworks (one campaign, several sizes)</div>
+<aside id="stack"><h3>Non-destructive stack</h3><div id="stackBody" class="small">Select a tile.</div><h3>Design audit (18 criteria)</h3><div id="audit" class="small"></div><h3>Review queue (p &lt; threshold)</h3><div id="rq" class="small"></div><h3>History</h3><div id="hist"></div></aside></main>
+<dialog id="prov"><h3 style="margin-top:0">AI providers (mock — no keys stored or sent)</h3>
+<table id="provT"></table>
+<p><label><input type=checkbox checked id="offline"> Offline-first: use Local unless a task is set to a cloud provider</label></p>
+<p class="small"><b>Data sent to a cloud provider:</b> layout JSON (layer tags, rects, text strings, target size) + one 256 px low-res thumbnail. Never source files, never full-res footage. <br>
+<b>Local:</b> ONNX saliency (in-app) + LLM via Ollama / LM Studio (http://127.0.0.1:11434 / :1234), RTX 3070 Ti 8 GB — 7–8B Q4 models ASSUMED to fit. Cost: 0.<br>
+<b>Cloud:</b> Claude (Anthropic API key), Grok (xAI API key), GPT (OpenAI API key). Billed per token by the provider on your key; ~1–3k tokens per size per call (ASSUMED). Account sign-in instead of keys only where the vendor offers it (ASSUMED/limited).</p>
+<p><b>Jev AI</b> (cloud only, decide/score tasks): POST https://thejevai.com/v1/systemone · model <code>jev-latest</code> · typed questions Choice (template, auto-tag, chunk split) / Score (quality) / Noul (needs-review) · text/JSON layout state only, no images · key stays server-side (proxy env JEV_API_KEY), never in the browser. API shape ASSUMED from brief.<br>
+<label>Auto-apply threshold p ≥ <input id="thr" type=number min=0.5 max=0.99 step=0.01 value=0.8 style="width:60px"></label> → applied with badge (revertable); below → Review queue; offline / no answer → local rules.</p>
+<div style="text-align:right"><button id="provClose">Close</button></div></dialog>
+<script src="adapt.js"></script><script src="https://cdn.jsdelivr.net/npm/ag-psd@34.1.0/dist/bundle.js"></script><script src="presets.js"></script>
+<script>
+const MW=1920,MH=1080;
+const MASTER=[
+ {id:"bg",name:"Background @bg",kind:"bg",box:[0,0,1920,1080]},
+ {id:"product",name:"Product @product.40.l",kind:"product",box:[120,180,640,720]},
+ {id:"logo",name:"Logo @logo.tr",kind:"logo",box:[1560,60,300,110]},
+ {id:"headline",name:"Headline @headline",kind:"text",bind:"headline",size:120,weight:800,box:[860,300,0,0]},
+ {id:"offer",name:"Offer @headline.clear",kind:"text",bind:"offer",size:56,weight:500,box:[860,470,0,0]},
+ {id:"price",name:"Price badge",kind:"price",bind:"price",box:[1500,720,300,300]},
+];
+// ---- import real presets (names verbatim, sizes never invented) ----
+const PROB=[];const F=window.PRESET_FILES;
+const sa=Adapt.importScreenList(F["ScreenAdapter_Config.json"],"ScreenAdapter_Config.json",PROB);
+const al=Adapt.importScreenList(F["Alshaheed_Screens_ScreenManager.json"],"Alshaheed_Screens_ScreenManager.json",PROB);
+const ae=Adapt.importScreenList(F["AE_ScreenManager_Config.json"],"AE_ScreenManager_Config.json",PROB);
+const screens=Adapt.mergePresets([ae,sa,al],PROB);
+const combos=Adapt.importCombiners(F["AE_ScreenManager_Combiners.json"],screens,"AE_ScreenManager_Combiners.json",PROB);
+const SIZES=[...screens,...combos].map(p=>({...p,on:false}));
+["1.7HD","Alshaheed - Mupi","1st Ring Road","Al Salam Mall","Boulevard Bridge","Marina_Crescent_Sync"].forEach(n=>{const s=SIZES.find(x=>x.name===n);if(s)s.on=true;});
+const SHEET=[
+ {version_id:"v01",lang:"EN",dir:"ltr",headline:"SUMMER SALE",offer:"Up to 50% off everything",price:"KD 9.90",color:"#0b3d91"},
+ {version_id:"v02",lang:"AR",dir:"rtl",headline:"تخفيضات الصيف",offer:"خصم حتى ٥٠٪ على كل شيء",price:"٩٫٩٠ د.ك",color:"#7a1f5c"},
+];
+const FONT='"Noto Sans Arabic","Segoe UI",Tahoma,system-ui,sans-serif';
+const PHOTO=document.createElement("canvas");PHOTO.width=1920;PHOTO.height=1080;(function(){const c=PHOTO.getContext("2d");
+ const g=c.createLinearGradient(0,0,0,1080);g.addColorStop(0,"#0d2a5c");g.addColorStop(.6,"#1f6f8b");g.addColorStop(1,"#0a2030");c.fillStyle=g;c.fillRect(0,0,1920,1080);
+ c.fillStyle="#0a1a28";for(let x=0;x<1920;x+=60){const h=120+((x*37)%140);c.fillRect(x,1080-h,50,h);}
+ const r=c.createRadialGradient(1580,330,10,1580,330,260);r.addColorStop(0,"#fff6c0");r.addColorStop(.3,"#ffb020");r.addColorStop(1,"rgba(255,140,0,0)");c.fillStyle=r;c.fillRect(1200,0,720,700);
+ c.fillStyle="#ffd66b";c.fillRect(1640,380,90,700);c.fillStyle="#fff";for(let y=420;y<1060;y+=40)c.fillRect(1660,y,50,14);
+ c.font="bold 40px sans-serif";c.fillStyle="#fff";c.fillText("SUBJECT",1600,1000);})();
+const AI={W:160,H:90,sal:null};(function(){const s=document.createElement("canvas");s.width=AI.W;s.height=AI.H;const c=s.getContext("2d");c.drawImage(PHOTO,0,0,AI.W,AI.H);
+ const d=c.getImageData(0,0,AI.W,AI.H).data,L=new Float32Array(AI.W*AI.H);for(let i=0;i<L.length;i++)L[i]=.299*d[i*4]+.587*d[i*4+1]+.114*d[i*4+2];
+ c.filter="blur(12px)";c.drawImage(PHOTO,0,0,AI.W,AI.H);const b=c.getImageData(0,0,AI.W,AI.H).data;AI.sal=new Float32Array(L.length);
+ for(let y=1;y<AI.H-1;y++)for(let x=1;x<AI.W-1;x++){const i=y*AI.W+x,bl=.299*b[i*4]+.587*b[i*4+1]+.114*b[i*4+2];
+  AI.sal[i]=Math.pow(Math.abs(L[i]-bl)+.5*(Math.abs(L[i+1]-L[i-1])+Math.abs(L[i+AI.W]-L[i-AI.W]))+(L[i]>200?40:0),1.5);}})();
+// ---- non-destructive state: master (const) → rules (computed) → AI decisions (status) → manual overrides (params) ----
+const CFG={gap:Adapt.DEFAULT_PRODUCT_GAP,thr:.8},P_ROUTE={};function renderRQ(){const q=Object.entries(P_ROUTE).filter(([,v])=>v.route==="review");const el=document.getElementById("rq");if(el)el.innerHTML=q.length?q.map(([k,v])=>`<div>• ${k.replace("|"," · ")} p=${v.p.toFixed(2)} <span class=small>${v.notes.slice(0,2).join("; ")}</span></div>`).join(""):"Empty — all decisions above threshold.";}const P_rect=(res,i)=>res.rects[i];
+var ART={a:null,an:null};
+const ST={ai:{},manual:{},mov:{}},HIST=[];let SEL=null,P_TPL=null;
+const keyOf=(row,s)=>row.version_id+"|"+s.name;
+const aiOn=(k,id)=>((ST.ai[k]||{})[id]??"accepted")==="accepted";
+const man=k=>Object.assign({hlScale:1,hlDx:0,hlDy:0},ST.manual[k]||{});
+function setState(label,mutate){const before=JSON.stringify(ST);mutate();HIST.push({label,before,t:new Date().toLocaleTimeString()});renderAll();}
+document.getElementById("undo").onclick=()=>{const h=HIST.pop();if(!h)return;const b=JSON.parse(h.before);ST.ai=b.ai;ST.manual=b.manual;ST.mov=b.mov||{};renderAll();};
+function toggleAI(k,id,label){setState(`${aiOn(k,id)?"Revert":"Accept"} ${label} · ${k}`,()=>{(ST.ai[k]=ST.ai[k]||{})[id]=aiOn(k,id)?"reverted":"accepted";});}
+const mctx=document.createElement("canvas").getContext("2d");
+const meas=(font)=>s=>{mctx.font=font;return mctx.measureText(s).width;};
+function masterLayers(row,tagsOn){
+  return MASTER.map(L=>{let [x,y,w,h]=L.box;let name=L.name;
+    if(L.kind==="text"){mctx.font=`${L.weight} ${L.size}px ${FONT}`;w=Math.max(mctx.measureText(row[L.bind]||" ").width,10);h=L.size*1.25;}
+    const at=Adapt.autoTag(L.name,L.box,MW,MH);if(at&&tagsOn)name=L.name+" "+at.tag;
+    return {L,name,at,rect:{left:0,top:0,width:w,height:h},frac:{x0:x/MW,y0:y/MH,wF:w/MW,hF:h/MH,cx:(x+w/2)/MW,cy:(y+h/2)/MH}};});
+}
+// Build the whole stack for one tile → {res, decisions, draw plan}
+function plan(row,s,forceTpl){useMaster(s,row);
+  const k=keyOf(row,s),tw=s.w,th=s.h,rtl=row.dir==="rtl",ml=masterLayers(row,aiOn("*","autotag"));
+  const res=Adapt.layoutScreen(ml,MW,MH,tw,th,{rtl});const D=[];
+  const tall=["v","uv","xv"].includes(res.orient),wide=["uw","xw"].includes(res.orient)||tw/th>=2.5;
+  ml.forEach(m=>{if(m.at)D.push({id:"autotag",label:"auto-tag "+m.at.tag,why:`“${m.L.name}” → ${m.at.tag} (${m.at.why}) · heuristic`,global:true});});
+  D.push({id:"crop",label:"smart crop",why:"Background crop window chosen by saliency (subject kept). Revert = centre crop."});
+  const T={};ml.forEach((m,i)=>{const r=res.rects[i];if(!r||m.L.kind!=="text")return;T[m.L.id]={r,font:m.L.size*(r.h/m.rect.height),lines:[row[m.L.bind]]};});
+  // Senior-designer composer (all classes + combined faces). Revert = v0.3 rules layout.
+  const TPL=forceTpl??aiOn(k,"template"),RECTS=res.rects.slice(),EXTRA=[],idx=kind=>ml.findIndex(m=>m.L.kind===kind),arab=/[\u0600-\u06FF]/.test(row.headline);
+  D.push({id:"template",label:"designer layout "+res.orient+(s.faces&&s.faces.length>1?" · "+s.faces.length+" faces":""),why:`Per-class composition template "${res.orient}" (hierarchy, fill, spacing scale, optical balance)${s.faces&&s.faces.length>1?"; hero on the largest face, brand + CTA + offer on the others":""}. Parameters editable in TEMPLATES (engine). Revert = rules-only layout.`});
+  if(TPL){const Lw=id=>MASTER.find(x=>x.id===id).weight,mh=meas(`${Lw("headline")} 1px ${FONT}`),mo=meas(`${Lw("offer")} 1px ${FONT}`);
+    const LB=Adapt.lookupLayout(s.name,tw,th);const out=Adapt.composeFaces(artIn({libZones:LB.entry&&!(s.faces&&s.faces.length>1)&&!(ST.noLib)?{zones:LB.entry.zones,ribbon:LB.entry.ribbon,source:LB.source}:undefined,tw,th,rtl,texts:{headline:row.headline,offer:row.offer},measure:{headline:mh,offer:mo},productAspect:640/720,logoAspect:300/110,pair:(OR=>OR?{texts:{headline:OR.headline,offer:OR.offer},measure:{headline:mh,offer:mo}}:undefined)(SHEET.find(r=>r.dir!==row.dir))}),s.faces);
+    out.forEach(o=>{const c=o.c;if(o.hero){RECTS[idx("product")]=c.rects.product||null;RECTS[idx("logo")]=c.rects.logo||null;RECTS[idx("price")]=c.rects.cta||null;
+        for(const id of ["headline","offer"]){const t=c.text[id];if(t)T[id]={r:t.r,box:t.box,font:t.font,lines:t.lines,center:t.align==="center"};else delete T[id];}
+        P_TPL=c;}
+      else{if(c.rects.logo)EXTRA.push({kind:"logo",r:c.rects.logo});if(c.rects.cta)EXTRA.push({kind:"price",r:c.rects.cta});if(c.text.offer)EXTRA.push({kind:"offer",t:{...c.text.offer,center:c.text.offer.align==="center"}});}});
+    if(rtl&&arab&&P_TPL.tpl.kashida&&T.headline&&T.headline.lines.length===1&&Adapt.KASHIDA_CLASSES.includes(P_TPL.cls)){D.push({id:"kashida",label:"kashida",why:"Wide Arabic headline: tatweel (U+0640) at each word's last joining point stretches lines to the slot width (≤3 per word, engine-enforced) · port of vectorcraft kashida.rs"});
+      if(aiOn(k,"kashida")){const h=T.headline,f=meas(`${Lw("headline")} ${h.font}px ${FONT}`);let add=0;h.lines=h.lines.map(l=>{const kf=Adapt.kashidaFit(l,h.box.w,f,3);add+=kf.added;return kf.text;});
+        const w=Math.max(...h.lines.map(f));h.r={...h.r,x:h.r.x+h.r.w-w,w};h.kashida=add;}}}
+  if(!TPL&&tall&&T.headline){D.push({id:"chunk",label:"word split",why:"Tall frame: headline/offer broken into balanced word chunks and placed in the larger free band above/below the product · heuristic stand-in for AI word-split"});
+    if(aiOn(k,"chunk")){const mg=res.margin,bx=mg,bw=tw-2*mg;const pi=ml.findIndex(m=>m.L.kind==="product"),pr=pi>=0?res.rects[pi]:null;
+      let band={y0:T.headline.r.y,y1:th-mg};if(pr){const above={y0:mg+th*.06,y1:pr.y-th*.01},below={y0:pr.y+pr.h+th*.01,y1:th-mg};band=(above.y1-above.y0)>=(below.y1-below.y0)?above:below;}
+      const bandH=Math.max(0,band.y1-band.y0),need=th*((res.orient==="v"?.2:.26)+.12+.015),fit=Math.min(1,bandH/need);let y=band.y0;
+      for(const id of ["headline","offer"]){const L=MASTER.find(x=>x.id===id);if(!T[id])continue;const bh=fit*th*(id==="headline"?(res.orient==="v"?.2:.26):.12);
+        const c=Adapt.chunkToBox(row[L.bind],bw,bh,meas(`${L.weight} 1px ${FONT}`),id==="headline"?4:5);
+        const font=Math.min(c.font,(id==="headline"?th*.09:th*.04)*fit);T[id]={r:{x:bx,y,w:bw,h:c.lines.length*font*1.12},font,lines:c.lines,center:true};y+=T[id].r.h+th*.015;}}}
+  if(!TPL&&rtl&&wide&&Adapt.KASHIDA_CLASSES.includes(res.orient)&&T.headline&&/[\u0600-\u06FF]/.test(row.headline)){D.push({id:"kashida",label:"kashida",why:"Wide frame, Arabic: tatweel (U+0640) inserted at last joining point of each word so the headline fills its column · port of vectorcraft kashida.rs"});
+    if(aiOn(k,"kashida")){const h=T.headline,L=MASTER.find(x=>x.id==="headline"),f=`${L.weight} ${h.font}px ${FONT}`;
+      const target=Math.min(h.r.w*1.45,h.r.x+h.r.w-res.margin);const kf=Adapt.kashidaFit(row.headline,target,meas(f),3);h.lines=[kf.text];h.kashida=kf.added;h.r={...h.r,x:h.r.x+h.r.w-meas(f)(kf.text),w:meas(f)(kf.text)};}}
+  const M=man(k);if(M.logoScale&&M.logoScale!==1){const li=idx("logo"),L0=RECTS[li];if(L0){const w=L0.w*M.logoScale,h=L0.h*M.logoScale,cx=L0.x+L0.w/2<tw/2?L0.x:L0.x+L0.w-w;RECTS[li]={x:cx,y:L0.y,w,h};}}
+  if(T.headline&&(M.hlScale!==1||M.hlDx||M.hlDy)){const h=T.headline;h.font*=M.hlScale;h.r={x:h.r.x+M.hlDx*tw,y:h.r.y+M.hlDy*th,w:h.r.w*M.hlScale,h:h.r.h*M.hlScale};h.manual=true;}
+  // HARD RULE: text never overlaps the product; keep GAP. Layout resolves it (move → shrink). Opt-out only per layer (allowOverlap / ".overlap").
+  const gapPx=CFG.gap*Math.min(tw,th),pi2=ml.findIndex(m=>m.L.kind==="product"),prod=pi2>=0?RECTS[pi2]:null;
+  const grp=Object.keys(T).filter(id=>{const L=MASTER.find(x=>x.id===id);return !Adapt.allowsOverlap(L.name,L.allowOverlap);});
+  if(prod&&grp.length){const hows=[];
+    // per text layer (a headline above and an offer below the product must not be merged into one block)
+    grp.forEach(id=>{const t=T[id],av=Adapt.avoidRect(t.r,prod,tw,th,res.margin,gapPx);hows.push(av.how);
+      if(av.how==="move"||av.how==="shrink"){t.r=av.r;t.font*=av.scale;}});
+    const worst=["impossible","shrink","move","none"].find(h=>hows.includes(h));
+    D.unshift({id:"rule-gap",rule:true,label:"clear of product: "+worst,why:`Hard rule: text keeps ≥${Math.round(gapPx)} px (${(CFG.gap*100).toFixed(1)}% of short side) from the product. Per layer: ${grp.map((g,i)=>g+" "+hows[i]).join(", ")}. Opt-out per layer only.`});}
+  // HARD RULE 2: price circle (CTA) keeps the same gap from headline/offer/product/logo — the badge moves (then shrinks), text never does.
+  {const ci=idx("price"),cr=ci>=0?RECTS[ci]:null;if(cr&&!(TPL&&s.faces&&s.faces.length>1)){const obs=Object.keys(T).map(id=>T[id].r).concat([prod,RECTS[idx("logo")]].filter(Boolean));
+    const kc=Adapt.keepClear(cr,obs,tw,th,res.margin,gapPx);RECTS[ci]=kc.r;D.unshift({id:"rule-cta",rule:true,label:"price clear of text: "+kc.how,why:`Hard rule: price circle keeps ≥${Math.round(gapPx)} px from headline, offer, product and logo; resolved by ${kc.how} (badge moves first, then shrinks to ≥60%).`});}}
+  const items=[];ml.forEach((m,i)=>{const r=RECTS[i];if(!r)return;if(m.L.kind==="logo")items.push({kind:"logo",r});if(m.L.kind==="price")items.push({kind:"cta",r});if(m.L.kind==="product")items.push({kind:"product",r});});
+  Object.keys(T).forEach(id=>{const L=MASTER.find(x=>x.id===id),t=T[id];items.push({kind:"text",r:t.r,fontPx:t.font,allow:Adapt.allowsOverlap(L.name,L.allowOverlap)&&false});});
+  const qa=Adapt.qaScore(items.filter(it=>!(it.kind==="text"&&it.allow)),tw,th,res.margin,.035,gapPx);D.push({id:"qa",label:"QA "+qa.score,why:"Auto QA: "+(qa.issues.join("; ")||"no issues")+" · heuristic",qa});
+  const g=(id)=>RECTS[idx(id)]||undefined,ds=Adapt.designScore({tw,th,cls:res.orient,rtl,arabic:arab,kashidaUsed:!!(T.headline&&T.headline.kashida),margin:res.margin,headline:T.headline&&{...T.headline,box:T.headline.box},offer:T.offer,logo:g("logo"),product:g("product"),cta:g("price")});
+  const pr=ds.total/100,route=Adapt.routeDecision(pr,CFG.thr??.8);P_ROUTE[k]={p:pr,route,notes:ds.notes};
+  D.push({id:"route",rule:route==="review",label:(route==="auto"?"auto p=":"needs review p=")+pr.toFixed(2),why:`Decision routing (Jev AI Score/Noul stand-in = rubric/100): p ${route==="auto"?"≥":"<"} threshold ${(CFG.thr??.8)} → ${route==="auto"?"auto-applied with badge":"queued for review"}.`});
+  D.push({id:"design",label:"Design "+ds.total,why:"AI critic rubric (heuristic stand-in): "+Object.entries(ds.scores).map(([a,b])=>a+" "+b.toFixed(2)).join(", ")+(ds.notes.length?" · "+ds.notes.join("; "):""),qa:{score:ds.total}});
+  const PL={k,res,ml,T,D,M,RECTS,EXTRA,ds,TPL,SCRIM:{}};
+  // auto contrast: scrim/gradient behind any text block that fails (headline ≥3:1, body ≥4.5:1) — reversible badge
+  {const need={headline:3,offer:4.5},fix=[];Object.keys(T).forEach(id=>{const a=Adapt.scrimAlpha(lumOf(245,245,245),bgLum(row,s,PL,T[id].r),need[id]||4.5);if(a>0)fix.push([id,a]);});
+   if(fix.length){D.push({id:"contrast",label:"auto scrim",why:"Contrast auto-fix: soft dark gradient behind "+fix.map(([i,a])=>`${i} (${Math.round(a*100)}%)`).join(", ")+" so text reaches ≥3:1 headline / ≥4.5:1 body. Revert = no scrim."});if(aiOn(k,"contrast"))fix.forEach(([i,a])=>PL.SCRIM[i]=a);}}
+  return PL;
+}
+// ---------- Real artwork pixels (PSD layers via ag-psd). Layers stay separate; the tile places each role unit in its zone ----------
+const flatL=ls=>ls.flatMap(l=>[l,...(l.children?flatL(l.children):[])]);
+function roleLayers(m,role){const ids=new Set(m.an.roles.filter(r=>r.role===role).map(r=>r.id));return flatL(m.a.layers).filter(l=>ids.has(l.id)&&l.px&&!l.hidden);}
+function unitCanvas(m,role){m.U=m.U||{};if(m.U[role]!==undefined)return m.U[role];const ls=role.split("+").flatMap(r=>roleLayers(m,r));if(!ls.length)return m.U[role]=null;
+  const x0=Math.min(...ls.map(l=>l.box[0])),y0=Math.min(...ls.map(l=>l.box[1])),x1=Math.max(...ls.map(l=>l.box[0]+l.box[2])),y1=Math.max(...ls.map(l=>l.box[1]+l.box[3]));
+  const c=document.createElement("canvas");c.width=Math.max(1,x1-x0);c.height=Math.max(1,y1-y0);const g=c.getContext("2d");const order=flatL(m.a.layers);
+  ls.slice().sort((p,q)=>order.indexOf(q)-order.indexOf(p)).forEach(l=>{g.save();if(l.opacity!=null)g.globalAlpha=l.opacity;if(l.blend==="multiply")g.globalCompositeOperation="multiply";g.drawImage(l.px,l.box[0]-x0,l.box[1]-y0);g.restore();}); // bottom→top
+  return m.U[role]={c,box:[x0,y0,x1-x0,y1-y0]};}
+function bgInfo(m){if(m.BG!==undefined)return m.BG;const L=roleLayers(m,"bg")[0];if(!L)return m.BG=null;const q=document.createElement("canvas");q.width=32;q.height=18;const g=q.getContext("2d");g.drawImage(L.px,0,0,32,18);
+  const d=g.getImageData(0,0,32,18).data;let r=0,gg=0,b=0,v=0;const n=d.length/4;for(let i=0;i<d.length;i+=4){r+=d[i];gg+=d[i+1];b+=d[i+2];}r/=n;gg/=n;b/=n;for(let i=0;i<d.length;i+=4)v+=(d[i]-r)**2+(d[i+1]-gg)**2+(d[i+2]-b)**2;
+  return m.BG={L,flat:Math.sqrt(v/n)<6,color:`rgb(${r|0},${gg|0},${b|0})`,lum:(.2126*r+.7152*gg+.0722*b)/255};}
+function pxFixStyle(a,an){if(!a.topFirst)return;const m={a,an};const bi=bgInfo(m);if(bi&&bi.flat){const r=an.rules.find(x=>x.key==="artStyle");if(r){r.value="flat";r.why="background pixels are one flat colour ("+bi.color+")";r.overrides="no scrim; extend the colour on any ratio";}}}
+/** Rasterised text line → words by empty alpha columns (gap ≥ 22% of the line height), then re-flowed into the line count that best fits the zone. RTL keeps right-to-left order. */
+function reflowRaster(c,za,rtl,maxN){maxN=maxN||4;c.__rf=c.__rf||{};const key=za.toFixed(2)+rtl+maxN;if(c.__rf[key])return c.__rf[key];const W=c.width,H=c.height,d=c.getContext("2d").getImageData(0,0,W,H).data,col=new Uint8Array(W);
+  for(let x=0;x<W;x++){for(let y=0;y<H;y+=2)if(d[(y*W+x)*4+3]>40){col[x]=1;break;}}
+  const words=[];let x=0;while(x<W){while(x<W&&!col[x])x++;if(x>=W)break;let s=x,gap=0,e=x;while(x<W){if(col[x]){gap=0;e=x;}else if(++gap>=H*.22)break;x++;}words.push([s,e+1]);}
+  if(words.length<2)return c.__rf[key]={c,lines:1};
+  let best=null;for(let n=1;n<=Math.min(maxN,words.length);n++){const per=Math.ceil(words.length/n),ls=[];for(let i=0;i<words.length;i+=per)ls.push(words.slice(i,i+per));
+    const lw=ls.map(l=>l[l.length-1][1]-l[0][0]),w=Math.max(...lw),h=n*H*1.1,sc=Math.min(za>w/h?1:1,1),fit=Math.min(1/w*za,1/h);if(!best||fit>best.fit)best={n,ls,lw,w,h,fit};}
+  if(best.n===1)return c.__rf[key]={c,lines:1};
+  const o=document.createElement("canvas");o.width=best.w;o.height=Math.ceil(best.h);const g=o.getContext("2d");
+  best.ls.forEach((l,i)=>{const x0=l[0][0],w=l[l.length-1][1]-x0;g.drawImage(c,x0,0,w,H,(best.w-w)/2,i*H*1.1,w,H);});
+  if(rtl){/* RTL raster: rightmost words are read first, so lines must be taken from the right end */const o2=document.createElement("canvas");o2.width=o.width;o2.height=o.height;const g2=o2.getContext("2d");const rl=[];for(let i=words.length;i>0;i-=Math.ceil(words.length/best.n))rl.push(words.slice(Math.max(0,i-Math.ceil(words.length/best.n)),i));
+    rl.forEach((l,i)=>{const x0=l[0][0],w=l[l.length-1][1]-x0;g2.drawImage(c,x0,0,w,H,(o2.width-w)/2,i*H*1.1,w,H);});return c.__rf[key]={c:o2,lines:best.n};}
+  return c.__rf[key]={c:o,lines:best.n};}
+function clipAway(Z,o,g){const ix=Math.max(0,Math.min(Z.x+Z.w,o.x+o.w)-Math.max(Z.x,o.x)),iy=Math.max(0,Math.min(Z.y+Z.h,o.y+o.h)-Math.max(Z.y,o.y));if(!ix||!iy)return Z;
+  const c=[{x:Z.x,y:Z.y,w:o.x-g-Z.x,h:Z.h},{x:o.x+o.w+g,y:Z.y,w:Z.x+Z.w-(o.x+o.w+g),h:Z.h},{x:Z.x,y:Z.y,w:Z.w,h:o.y-g-Z.y},{x:Z.x,y:o.y+o.h+g,w:Z.w,h:Z.y+Z.h-(o.y+o.h+g)}].filter(r=>r.w>0&&r.h>0);
+  return c.length?c.sort((a,b)=>b.w*b.h-a.w*a.h)[0]:Z;}
+function contain(ctx,src,r,ax,ay){if(ctx.__rec)ctx.__rec.push(r);const q=Math.min(r.w/src.width,r.h/src.height);const w=src.width*q,h=src.height*q;ctx.drawImage(src,r.x+(r.w-w)*(ax??.5),r.y+(r.h-h)*(ay??.5),w,h);const o={x:r.x+(r.w-w)*(ax??.5),y:r.y+(r.h-h)*(ay??.5),w,h,q};(CPX||[]).push([src,o]);return o;}
+let CPX=null;
+function hasPx(){return !!(ART&&ART.a&&ART.a.topFirst&&ART.an&&flatL(ART.a.layers).some(l=>l.px));}
+const MIN_HL_TALL=0.025;/* ASSUMED: tall roadside columns read at ~100 m+; headline line ≥2.5% of screen height */
+/** Equal-size faces (h-dup / v-dup walls) with nothing for the secondary faces to carry (no logo / price in the art): repeat the hero face on every face. */
+function dupFaces(ctx,s,P,empty){const F=s.faces;if(!F||F.length<2||!empty)return;if(!F.every(f=>Math.abs(f.w-F[0].w)<2&&Math.abs(f.h-F[0].h)<2))return;
+  const z=P.PXR.copyZone||P.PXR.product;const hero=F.find(f=>z&&z.x>=f.x-1&&z.y>=f.y-1&&z.x<f.x+f.w&&z.y<f.y+f.h)||F[0];
+  const M=ctx.getTransform(),t=document.createElement("canvas");t.width=Math.max(1,Math.round(hero.w*M.a));t.height=Math.max(1,Math.round(hero.h*M.d));t.getContext("2d").drawImage(ctx.canvas,hero.x*M.a+M.e,hero.y*M.d+M.f,t.width,t.height,0,0,t.width,t.height);F.forEach(f=>{if(f!==hero)ctx.drawImage(t,f.x,f.y,f.w,f.h);});P.PXMODE+=" · hero repeated on "+F.length+" equal faces";if(P.PXQ)P.PXQ.mode=P.PXMODE;}
+/** Contrast from the rendered pixels: headline = its own text pixels (mask from the layer alpha) vs. the pixels right around them; offers = text inside each pill (10th vs 90th luminance percentile of the pill's own pixels). */
+function pxContrast(ctx,m,P){const lum=(r,g,b)=>{const f=v=>{v/=255;return v<=.03928?v/12.92:Math.pow((v+.055)/1.055,2.4);};return .2126*f(r)+.7152*f(g)+.0722*f(b);},cr=(a,b)=>(Math.max(a,b)+.05)/(Math.min(a,b)+.05),med=a=>{a.sort((x,y)=>x-y);return a.length?a[a.length>>1]:0;};
+  let hlC=null;const hm=P.PXR.hlMask;
+  if(hm){const [src,o0]=hm,M=ctx.getTransform(),o={x:o0.x*M.a+M.e,y:o0.y*M.d+M.f,w:o0.w*M.a,h:o0.h*M.d,q:o0.q*M.a},W=ctx.canvas.width,H=ctx.canvas.height,pad=Math.max(4,o.h*.25),x0=Math.max(0,Math.floor(o.x-pad)),y0=Math.max(0,Math.floor(o.y-pad)),x1=Math.min(W,Math.ceil(o.x+o.w+pad)),y1=Math.min(H,Math.ceil(o.y+o.h+pad));
+    if(x1>x0&&y1>y0){const T=ctx.getImageData(x0,y0,x1-x0,y1-y0).data,sk=src.getContext("2d").getImageData(0,0,src.width,src.height).data,st=Math.max(1,Math.floor(Math.sqrt((x1-x0)*(y1-y0)/40000)));const tx=[],bg=[];
+      for(let y=y0;y<y1;y+=st)for(let x=x0;x<x1;x+=st){const sx=Math.floor((x-o.x)/o.q),sy=Math.floor((y-o.y)/o.q);const a=sx>=0&&sy>=0&&sx<src.width&&sy<src.height?sk[(sy*src.width+sx)*4+3]:0;const i=((y-y0)*(x1-x0)+(x-x0))*4;if(a===0)bg.push(lum(T[i],T[i+1],T[i+2]));}
+      for(let i=0;i<sk.length;i+=4*Math.max(1,Math.floor(sk.length/4/20000)))if(sk[i+3]>200)tx.push(lum(sk[i],sk[i+1],sk[i+2])); /* text colour from the layer itself (exact, effects baked); background from the rendered tile around it */
+      if(tx.length>10&&bg.length>10)hlC=+cr(med(tx),med(bg)).toFixed(2);}}
+  let offC=null;const ou=unitCanvas(m,"offer");if(ou){const offs=roleLayers(m,"offer");let mins=[];offs.forEach(L=>{if(!L.px)return;const d=L.px.getContext("2d").getImageData(0,0,L.px.width,L.px.height).data,a=[];for(let i=0;i<d.length;i+=16)if(d[i+3]>200)a.push(lum(d[i],d[i+1],d[i+2]));if(a.length<20)return;a.sort((x,y)=>x-y);mins.push(cr(a[Math.floor(a.length*.03)],a[Math.floor(a.length*.6)]));});if(mins.length)offC=+Math.min(...mins).toFixed(2);}
+  return {headline:hlC,offer:offC};}
+function drawPx(ctx,row,s,P){const tw=s.w,th=s.h,m=ART,bi=bgInfo(m);CPX=[];
+  if(Math.abs(Math.log((tw/th)/(m.a.w/m.a.h)))<=0.02&&m.a.composite&&!(s.faces&&s.faces.length>1)){ctx.drawImage(m.a.composite,0,0,tw,th);P.PXMODE="master as-is (same ratio, scaled)";const hu3=unitCanvas(m,"headline");P.PXR={};if(hu3){const f=tw/m.a.w;P.PXR.hlMask=[hu3.c,{x:hu3.box[0]*f,y:hu3.box[1]*f,w:hu3.c.width*f,h:hu3.c.height*f,q:f}];}P.PXC=pxContrast(ctx,m,P);P.PXQ={hlPx:Math.round((hu3?hu3.box[3]:0)*th/m.a.h),hlPct:+((hu3?hu3.box[3]:0)/m.a.h*100).toFixed(1),overlapPx:0,outside:false,mode:P.PXMODE};return P;}
+  if(bi){if(bi.flat){ctx.fillStyle=bi.color;ctx.fillRect(0,0,tw,th);}else{const L=bi.L,f=Math.max(tw/L.px.width,th/L.px.height);const w=tw/f,h=th/f,fo=(m.an.rules.find(r=>r.key==="focal")||{}).value||[.5,.5];
+    const x=Math.max(0,Math.min(L.px.width-w,fo[0]*L.px.width-w/2)),y=Math.max(0,Math.min(L.px.height-h,fo[1]*L.px.height-h/2));ctx.drawImage(L.px,x,y,w,h,0,0,tw,th);}}
+  else{ctx.fillStyle="#333";ctx.fillRect(0,0,tw,th);}
+  const rectOf=kind=>{const i=P.ml.findIndex(x=>x.L.kind===kind);return i>=0?P.RECTS[i]:null;};
+  P.PXR={};P.PXHL=0;P.PXC=null;const pr=rectOf("product"),pu=unitCanvas(m,"product");if(pr&&pu)P.PXR.product=contain(ctx,pu.c,pr,.5,1);
+  const zone=id=>P.T[id]?P.T[id].r:null,al=row.dir==="rtl"?1:0;const Zs=[zone("headline"),zone("offer"),rectOf("price")].filter(Boolean);
+  const hu=unitCanvas(m,"headline"),ou=unitCanvas(m,"offer"),cu2=unitCanvas(m,"headline+offer");
+  if(Zs.length&&cu2){const x0=Math.min(...Zs.map(r=>r.x)),y0=Math.min(...Zs.map(r=>r.y));let Z={x:x0,y:y0,w:Math.max(...Zs.map(r=>r.x+r.w))-x0,h:Math.max(...Zs.map(r=>r.y+r.h))-y0};
+    if(P.PXR.product)Z=clipAway(Z,P.PXR.product,Math.min(tw,th)*.03);P.PXR.copyZone=Z;
+    const az=Z.w/Z.h,au=cu2.c.width/cu2.c.height,k=Math.max(az/au,au/az);const tall=!!(hu&&ou)&&(az<au*0.75||hu.c.height*Math.min(Z.w/cu2.c.width,Z.h/cu2.c.height)<th*0.025);P.PXMODE=k<=2.2&&!tall?"copy unit":"split";
+    if((k<=2.2&&!tall)||!(hu&&ou)){const o=contain(ctx,cu2.c,Z,al,.5);if(hu)P.PXR.hlMask=[hu.c,{x:o.x+(hu.box[0]-cu2.box[0])*o.q,y:o.y+(hu.box[1]-cu2.box[1])*o.q,w:hu.c.width*o.q,h:hu.c.height*o.q,q:o.q}];}
+    else if(az>1&&!tall){const wH=Z.w*hu.c.width/(hu.c.width+ou.c.width*Z.h/ou.c.height*hu.c.height/Z.h||1);const gap=Z.h*.15,hw=Math.min(Z.w*.62,Z.h*hu.c.width/hu.c.height);
+      const hr={x:al?Z.x+Z.w-hw:Z.x,y:Z.y,w:hw,h:Z.h},or={x:al?Z.x:Z.x+hw+gap,y:Z.y,w:Z.w-hw-gap,h:Z.h};P.PXR.hlMask=[hu.c,contain(ctx,hu.c,hr,al,.5)];contain(ctx,ou.c,or,al,.5);void wH;}
+    else{/* Stacked: tagline re-flowed at word gaps, anchored to the bottom; pills above with ≥1U gap (U = ¼ headline line). Tall columns: min headline = MIN_HL_TALL of screen height (viewing distance, ASSUMED) — more lines / bigger share until met. */
+      const rtl=row.dir==="rtl",tallCol=tw/th<0.5,minHl=th*(tallCol?MIN_HL_TALL:0.025);let best=null;
+      for(const share of tallCol?[.35,.45,.55]:[.35])for(const n of tallCol?[4,6]:[4]){const hz={x:Z.x,y:Z.y+Z.h*(1-share),w:Z.w,h:Z.h*share},rf=reflowRaster(hu.c,hz.w/hz.h,rtl,n),q=Math.min(hz.w/rf.c.width,hz.h/rf.c.height),hl=hu.c.height*q;
+        if(!best||(best.hl<minHl&&hl>best.hl)){best={hz,rf,hl};}if(hl>=minHl)break;}
+      const {hz,rf}=best;if(rf.lines>1)P.PXMODE="split + baked tagline re-flowed into "+rf.lines+" lines (word gaps)";
+      const oh=contain(ctx,rf.c,hz,.5,1);P.PXHL=hu.c.height*oh.q;P.PXR.hlMask=[rf.c,oh];const U=P.PXHL/4;P.PXR.gapU=U;
+      const oz={x:Z.x,y:Z.y,w:Z.w,h:Math.max(1,oh.y-U-Z.y)};const oo=contain(ctx,ou.c,oz,.5,.5);P.PXR.offGapPx=Math.round(oh.y-(oo.y+oo.h));}}
+  {const hu2=unitCanvas(m,"headline"),pl=CPX.filter(([c])=>c!==(pu&&pu.c));let hl=P.PXHL||0;if(!hl)pl.forEach(([c,o])=>{if(hu2&&(c===hu2.c))hl=hu2.box[3]*o.q;else if(c===(unitCanvas(m,"headline+offer")||{}).c&&hu2)hl=hu2.box[3]*o.q;});
+   const pr2=P.PXR.product,ov=pr2?pl.reduce((a,[,o])=>a+Math.max(0,Math.min(o.x+o.w,pr2.x+pr2.w)-Math.max(o.x,pr2.x))*Math.max(0,Math.min(o.y+o.h,pr2.y+pr2.h)-Math.max(o.y,pr2.y)),0):0;
+   const out=pl.some(([,o])=>o.x<-1||o.y<-1||o.x+o.w>tw+1||o.y+o.h>th+1);
+   P.PXQ={hlPx:Math.round(hl),hlPct:+(hl/th*100).toFixed(1),overlapPx:Math.round(ov),outside:out,mode:P.PXMODE};}
+  const lu=unitCanvas(m,"logo"),lr=rectOf("logo");if(lu&&lr)contain(ctx,lu.c,lr,.5,.5);
+  const cu=unitCanvas(m,"price"),cr2=rectOf("price");if(cu&&cr2)contain(ctx,cu.c,cr2,.5,.5);
+  dupFaces(ctx,s,P,!(lu&&lr)&&!(cu&&cr2));
+  P.PXC=pxContrast(ctx,m,P);
+  if(s.faces&&s.faces.length>1){ctx.save();ctx.strokeStyle="rgba(255,255,255,.7)";ctx.setLineDash([Math.max(tw,th)*.01,Math.max(tw,th)*.008]);ctx.lineWidth=Math.max(tw,th)*.003;s.faces.forEach(f=>ctx.strokeRect(f.x,f.y,f.w,f.h));ctx.restore();}
+  return P;}
+function draw(ctx,row,s,P,forceTpl){const tw=s.w,th=s.h;P=P||plan(row,s,forceTpl);if(hasPx())return drawPx(ctx,row,s,P);
+  P.ml.forEach((m,i)=>{const r=P.RECTS[i];if(!r)return;if(m.L.kind==="text"&&!P.T[m.L.id])return;const L=m.L;ctx.save();
+    if(L.kind==="bg"){let c;if(aiOn(P.k,"crop")){c=Adapt.saliencyCrop(AI.sal,AI.W,AI.H,tw/th);const q=PHOTO.width/AI.W;c={x:c.x*q,y:c.y*q,w:c.w*q,h:c.h*q};}
+      else{const f=Math.max(tw/PHOTO.width,th/PHOTO.height);c={w:tw/f,h:th/f};c.x=(PHOTO.width-c.w)/2;c.y=(PHOTO.height-c.h)/2;}
+      ctx.drawImage(PHOTO,c.x,c.y,c.w,c.h,0,0,tw,th);ctx.fillStyle=row.color||"#0b3d91";ctx.globalAlpha=.35;ctx.fillRect(0,0,tw,th);}
+    else if(L.kind==="product"){ctx.fillStyle="rgba(255,255,255,.18)";rr(ctx,r.x,r.y,r.w,r.h,r.w*.06);ctx.fill();ctx.fillStyle="rgba(255,255,255,.85)";ctx.beginPath();ctx.ellipse(r.x+r.w/2,r.y+r.h*.55,r.w*.28,r.h*.3,0,0,7);ctx.fill();
+      ctx.fillStyle="#0b3d91";ctx.font=`600 ${r.h*.06}px ${FONT}`;ctx.textAlign="center";ctx.fillText("PRODUCT",r.x+r.w/2,r.y+r.h*.57);}
+    else if(L.kind==="logo"){ctx.fillStyle="#fff";rr(ctx,r.x,r.y,r.w,r.h,r.h*.12);ctx.fill();ctx.fillStyle="#0b3d91";ctx.font=`800 ${r.h*.45}px ${FONT}`;ctx.textAlign="center";ctx.textBaseline="middle";ctx.fillText("LOGO",r.x+r.w/2,r.y+r.h/2);}
+    else if(L.kind==="price"){ctx.fillStyle="#ffcc00";ctx.beginPath();ctx.arc(r.x+r.w/2,r.y+r.h/2,Math.min(r.w,r.h)/2,0,7);ctx.fill();ctx.fillStyle="#111";ctx.font=`800 ${Math.min(r.w,r.h)*.2}px ${FONT}`;ctx.textAlign="center";ctx.textBaseline="middle";ctx.direction=row.dir;ctx.fillText(row.price,r.x+r.w/2,r.y+r.h/2,r.w*.85);}
+    else{const t=P.T[L.id];const sa=P.SCRIM&&P.SCRIM[L.id];if(sa){const pd=t.font*.35;ctx.save();ctx.fillStyle=`rgba(0,0,0,${sa})`;ctx.shadowColor=`rgba(0,0,0,${sa})`;ctx.shadowBlur=pd*2;rr(ctx,t.r.x-pd,t.r.y-pd,t.r.w+2*pd,t.r.h+2*pd,pd);ctx.fill();ctx.restore();}if(P.M.scrim){ctx.fillStyle="rgba(0,0,0,.45)";const pd=t.font*.25;rr(ctx,t.r.x-pd,t.r.y-pd,t.r.w+2*pd,t.r.h+2*pd,pd);ctx.fill();}ctx.fillStyle="#F5F5F5";ctx.font=`${L.weight} ${t.font}px ${FONT}`;ctx.textBaseline="top";ctx.direction=row.dir;
+      const LD=P.TPL?Adapt.leadingFor(row.headline+row.offer):1.12;t.lines.forEach((ln,j)=>{const y=t.r.y+j*t.font*LD+t.font*(LD-1)/2;
+        if(t.center){ctx.textAlign="center";ctx.fillText(ln,t.r.x+t.r.w/2,y,t.r.w);}else if(row.dir==="rtl"){ctx.textAlign="right";ctx.fillText(ln,t.r.x+t.r.w,y,t.r.w);}else{ctx.textAlign="left";ctx.fillText(ln,t.r.x,y,t.r.w);}});}
+    ctx.restore();});
+  P.EXTRA.forEach(e=>{ctx.save();const r=e.r;
+    if(e.kind==="logo"){ctx.fillStyle="#fff";rr(ctx,r.x,r.y,r.w,r.h,r.h*.12);ctx.fill();ctx.fillStyle="#0b3d91";ctx.font=`800 ${r.h*.45}px ${FONT}`;ctx.textAlign="center";ctx.textBaseline="middle";ctx.fillText("LOGO",r.x+r.w/2,r.y+r.h/2);}
+    else if(e.kind==="price"){ctx.fillStyle="#ffcc00";ctx.beginPath();ctx.arc(r.x+r.w/2,r.y+r.h/2,r.w/2,0,7);ctx.fill();ctx.fillStyle="#111";ctx.font=`800 ${r.w*.2}px ${FONT}`;ctx.textAlign="center";ctx.textBaseline="middle";ctx.direction=row.dir;ctx.fillText(row.price,r.x+r.w/2,r.y+r.h/2,r.w*.85);}
+    else{const t=e.t;ctx.fillStyle="#fff";ctx.font=`500 ${t.font}px ${FONT}`;ctx.textBaseline="top";ctx.direction=row.dir;const B=t.box||t.r;const LD=Adapt.leadingFor(row.headline+row.offer);t.lines.forEach((ln,j)=>{const y=t.r.y+j*t.font*LD+t.font*(LD-1)/2;if(t.center){ctx.textAlign="center";ctx.fillText(ln,B.x+B.w/2,y,B.w);}else if(row.dir==="rtl"){ctx.textAlign="right";ctx.fillText(ln,B.x+B.w,y,B.w);}else{ctx.textAlign="left";ctx.fillText(ln,B.x,y,B.w);}});}
+    ctx.restore();});
+  if(s.faces&&s.faces.length>1){ctx.save();ctx.strokeStyle="rgba(255,255,255,.7)";ctx.setLineDash([Math.max(tw,th)*.01,Math.max(tw,th)*.008]);ctx.lineWidth=Math.max(tw,th)*.003;s.faces.forEach(f=>ctx.strokeRect(f.x,f.y,f.w,f.h));ctx.restore();}
+  return P;}
+function rr(c,x,y,w,h,r){c.beginPath();c.moveTo(x+r,y);c.arcTo(x+w,y,x+w,y+h,r);c.arcTo(x+w,y+h,x,y+h,r);c.arcTo(x,y+h,x,y,r);c.arcTo(x,y,x+w,y,r);c.closePath();}
+const safe=s=>s.replace(/[^\w\u0600-\u06FF-]+/g,"_");
+function exportPNG(row,s){const c=document.createElement("canvas");c.width=s.w;c.height=s.h;draw(c.getContext("2d"),row,s);
+  c.toBlob(b=>{const a=document.createElement("a");a.href=URL.createObjectURL(b);a.download=`SummerSale_${row.version_id}_${row.lang}_${safe(s.name)}_${s.w}x${s.h}.png`;a.click();setTimeout(()=>URL.revokeObjectURL(a.href),2000);},"image/png");}
+function badge(P,d){if(d.rule){const e=document.createElement("span");e.className="b qa"+(d.label.endsWith("impossible")?" bad":"");e.style.borderStyle="dashed";e.textContent="RULE · "+d.label;e.title=d.why;return e;}const k=d.global?"*":P.k,on=aiOn(k,d.id);const e=document.createElement("span");
+  e.className="b"+(d.qa?" qa"+(d.qa.score<80?" bad":""):"")+(on?"":" off");e.textContent="AI · "+d.label;e.title=d.why+"\nClick to "+(on?"revert":"accept");
+  e.onclick=ev=>{ev.stopPropagation();toggleAI(k,d.id,d.label);};return e;}
+function tileCanvas(row,s,maxW,maxH){const q=Math.min(maxW/s.w,maxH/s.h),dpr=window.devicePixelRatio||1,c=document.createElement("canvas");
+  c.width=Math.max(1,Math.round(s.w*q*dpr));c.height=Math.max(1,Math.round(s.h*q*dpr));c.style.width=s.w*q+"px";c.style.height=s.h*q+"px";
+  const ctx=c.getContext("2d");ctx.scale(q*dpr,q*dpr);const P=draw(ctx,row,s);return {c,P};}
+const LORD=r=>r.lang==="EN"?0:r.lang==="AR"?1:2;
+function pairRows(){return SHEET.slice().sort((a,b)=>LORD(a)-LORD(b));}
+function renderGrid(){setTimeout(renderRQ,0);setTimeout(renderAudit,0);setTimeout(renderArtList,0);const g=document.getElementById("grid");g.innerHTML="";
+  const rows=pairRows(),on=SIZES.filter(s=>s.on);GRIDS=[];
+  const tb=document.createElement("div");tb.style.cssText="width:100%;display:flex;gap:6px;align-items:center";tb.innerHTML=`<span class=small>Grid view:</span><button class=g data-gv=pairs>${GV==="pairs"?"[EN | AR pairs]":"EN | AR pairs"}</button><button class=g data-gv=sep>${GV==="sep"?"[Separate tiles]":"Separate tiles"}</button><span class=small>double-click a tile for focus view</span>`;
+  tb.querySelectorAll("[data-gv]").forEach(b=>b.onclick=()=>{GV=b.dataset.gv;try{localStorage.setItem("dooh.gridView",GV);}catch(e){}renderGrid();});g.appendChild(tb);
+  if(GV==="sep"){SHEET.forEach(row=>on.forEach(s=>{const gi=GRIDS.length;GRIDS.push({s,row});const {c,P}=tileCanvas(row,s,340,230),mi=masterIdx(s,row),m=ARTS[mi];
+    const d=document.createElement("div");d.className="cell"+(SEL&&SEL.k===P.k?" sel":"");d.onclick=()=>{SEL={row,s,k:P.k};renderAll();};d.ondblclick=e=>{e.preventDefault();openFocus(gi);};d.appendChild(c);
+    const lab=document.createElement("div");lab.className="lab";lab.innerHTML=`<div>${row.version_id} ${row.lang} · <b>${s.name}</b> ${s.w}×${s.h}${s.kind==="combined"?" · combined "+s.faces.length+" faces":""} · class ${P.res.orient}</div>`+(m?`<span class="mb${ST.mov[s.name]!=null?" ov":""}">master: ${m.name} ${m.a.w}×${m.a.h}${ST.mov[s.name]!=null?" (override)":" (auto)"}</span>`:"");
+    const bs=document.createElement("div");bs.className="badges";P.D.forEach(x=>bs.appendChild(badge(P,x)));
+    if(P.T.headline&&P.T.headline.manual){const mm=document.createElement("span");mm.className="b man";mm.textContent="manual override";bs.appendChild(mm);}
+    const pb=document.createElement("button");pb.className="g";pb.textContent="PNG";pb.onclick=e=>{e.stopPropagation();exportPNG(row,s);};bs.appendChild(pb);
+    lab.appendChild(bs);d.appendChild(lab);g.appendChild(d);}));return;}
+  on.forEach((s)=>{const si=GRIDS.length;GRIDS.push({s,row:null});const fam=Adapt.screenFamily(s.w,s.h),stack=s.w/s.h>=5;
+    const card=document.createElement("div");card.className="pair"+(stack?" stack":"")+(SEL&&SEL.s===s?" sel":"");
+    const mi=masterIdx(s,rows[0]),m=ARTS[mi],mAR=rows[1]?ARTS[masterIdx(s,rows[1])]:null;
+    const hd=document.createElement("div");hd.className="ph";
+    hd.innerHTML=`<b>${s.name}</b> ${s.w}×${s.h}${s.kind==="combined"?" · combined "+s.faces.length+" faces":""} · ${fam.name||fam.key}`+(m?` <span class="mb${ST.mov[s.name]!=null?" ov":""}" title="Master used for this screen">master: ${m.name} ${m.a.w}×${m.a.h}${ST.mov[s.name]!=null?" (override)":" (auto)"}</span>`+(mAR&&mAR!==m?` <span class="mb" title="Master used for ${rows[1].lang}">${rows[1].lang}: ${mAR.name} ${mAR.a.w}×${mAR.a.h}</span>`:""):"");
+    if(ARTS.length>1){const sel=document.createElement("select");sel.className="s";sel.title="Override master for this screen (revertible; Undo also works)";
+      sel.innerHTML=`<option value="">auto (${ARTS[autoIdx(s)].name})</option>`+ARTS.map((a,i)=>`<option value=${i} ${ST.mov[s.name]===i?"selected":""}>${a.name} ${a.a.w}×${a.a.h}</option>`).join("");
+      sel.onclick=e=>e.stopPropagation();sel.onchange=()=>setState("Master "+(sel.value===""?"auto":ARTS[+sel.value].name)+" · "+s.name,()=>{if(sel.value==="")delete ST.mov[s.name];else ST.mov[s.name]=+sel.value;});hd.appendChild(sel);}
+    card.appendChild(hd);const body=document.createElement("div");body.className="pb";
+    const tw=stack?720:(rows.length>1&&s.h>s.w?170:340),th=stack?110:230;
+    rows.forEach(row=>{const {c,P}=tileCanvas(row,s,tw,th);
+      const d=document.createElement("div");d.className="cell"+(SEL&&SEL.k===P.k?" sel":"");d.onclick=()=>{SEL={row,s,k:P.k};renderAll();};d.ondblclick=e=>{e.preventDefault();openFocus(si);};
+      const lt=document.createElement("div");lt.innerHTML=`<span class=lt>${row.lang}</span> <span class=small>${row.version_id} · class ${P.res.orient}</span>`;d.appendChild(lt);d.appendChild(c);
+      const bs=document.createElement("div");bs.className="badges";P.D.forEach(x=>bs.appendChild(badge(P,x)));
+      if(P.T.headline&&P.T.headline.manual){const mm=document.createElement("span");mm.className="b man";mm.textContent="manual override";bs.appendChild(mm);}
+      const pb=document.createElement("button");pb.className="g";pb.textContent="PNG";pb.onclick=e=>{e.stopPropagation();exportPNG(row,s);};bs.appendChild(pb);
+      d.appendChild(bs);body.appendChild(d);});
+    card.appendChild(body);g.appendChild(card);});}
+// ---------- Multi-master (one campaign, several master sizes) ----------
+let ARTS=[],ACT=0,GRIDS=[],GV=(()=>{try{return localStorage.getItem("dooh.gridView")||"pairs";}catch(e){return "pairs";}})();
+function autoIdx(s,row){if(!ARTS.length)return -1;const M=ARTS.map(a=>({w:a.a.w,h:a.a.h,lang:a.lang||""}));return row?Adapt.pickMasterForLang(M,s.w,s.h,row.lang).index:Adapt.pickMaster(M,s.w,s.h).index;}
+function masterIdx(s,row){const o=ST.mov[s.name];if(o!=null&&ARTS[o]&&(!row||!ARTS[o].lang||ARTS[o].lang===row.lang))return o;return autoIdx(s,row);}
+function useMaster(s,row){const i=masterIdx(s,row);ART=i>=0?ARTS[i]:{a:null,an:null};}
+function renderArtList(){const L=document.getElementById("artList");if(!L)return;if(!ARTS.length){L.innerHTML="";return;}
+  const on=SIZES.filter(s=>s.on),cnt=ARTS.map((_,i)=>on.reduce((n,s)=>n+SHEET.filter(r=>masterIdx(s,r)===i).length,0));const langs=[...new Set(ARTS.map(a=>a.lang).filter(Boolean))],sz=l=>ARTS.filter(a=>a.lang===l).map(a=>a.a.w+'×'+a.a.h).sort().join(),mism=langs.length>1&&new Set(langs.map(sz)).size>1;
+  L.innerHTML=`<div class=small><b>${ARTS.length} master${ARTS.length>1?"s":""}</b> · one campaign · ${on.length} ticked screens${langs.length?" · language masters: "+langs.map(l=>l+" "+sz(l)).join(" / "):""}</div>`+(mism?`<div style=color:#f90>⚠ EN and AR masters have different sizes: each language is adapted from its own size.</div>`:"")+ARTS.map((a,i)=>{const f=Adapt.screenFamily(a.a.w,a.a.h),r=a.a.w/a.a.h;
+    return `<div class="mrow${i===ACT?" act":""}" data-mi=${i}>${a.thumb?`<img src="${a.thumb}">`:`<canvas data-th=${i} width=44 height=44></canvas>`}<div style="flex:1"><div><b>${a.name}</b></div><div class=small>${a.a.w}×${a.a.h} · ${r>=1?r.toFixed(2)+":1":"1:"+(1/r).toFixed(2)} · ${f.name||f.key} ${a.lang?" · <b>"+a.lang+" only</b>":""} · serves ${cnt[i]} tile${cnt[i]===1?"":"s"}</div></div><button class=g data-rm=${i} title="Remove master (other masters take over its screens)">✕</button></div>`;}).join("");
+  L.querySelectorAll("[data-th]").forEach(c=>{const a=ARTS[+c.dataset.th].a,x=c.getContext("2d"),q=40/Math.max(a.w,a.h);x.fillStyle="#2448f5";x.fillRect((44-a.w*q)/2,(44-a.h*q)/2,a.w*q,a.h*q);});
+  L.querySelectorAll("[data-mi]").forEach(e=>e.onclick=()=>{ACT=+e.dataset.mi;ART=ARTS[ACT];artShow();renderArtList();});
+  L.querySelectorAll("[data-rm]").forEach(b=>b.onclick=e=>{e.stopPropagation();const i=+b.dataset.rm;ARTS.splice(i,1);Object.keys(ST.mov).forEach(k=>{if(ST.mov[k]===i)delete ST.mov[k];else if(ST.mov[k]>i)ST.mov[k]--;});ACT=Math.min(ACT,ARTS.length-1);ART=ARTS[ACT]||{a:null,an:null};artShow();renderAll();});}
+// ---------- Focus view (view only) ----------
+const FV={i:0,mode:"fit",lang:"both",z:1,x:0,y:0};
+function openFocus(i){FV.i=i;FV.mode="fit";document.getElementById("fv").classList.add("on");renderFocus();}
+function closeFocus(){document.getElementById("fv").classList.remove("on");}
+function renderFocus(){const G=GRIDS[FV.i];if(!G)return;const s=G.s;const rows=G.row?[G.row]:pairRows().filter(r=>FV.lang==="both"||r.lang===FV.lang),stack=s.w/s.h>=5&&rows.length>1;
+  const S=document.getElementById("fvs");S.innerHTML="";S.className=stack?"stack":"";
+  const C=campaign(SHEET,[s]);const mi=masterIdx(s,G.row||pairRows()[0]),m=ARTS[mi];
+  rows.forEach(row=>{const c=document.createElement("canvas");c.width=s.w;c.height=s.h;draw(c.getContext("2d"),row,s);const w=document.createElement("div");
+    const a=C.tiles.find(t=>t.id===`${row.version_id} ${row.lang} · ${s.name}`)||{score:"?",rows:[]},f=a.rows.filter(r=>!r.pass);
+    w.innerHTML=`<div style="font-size:14px;margin-bottom:4px"><span class=lt>${row.lang}</span> audit <b>${a.score}</b> ${f.length?`<span class=fvf>fails: ${f.map(r=>r.name+" ("+r.reason.slice(0,80)+")").join(" · ")}</span>`:"<span style=color:#9fe3b8>all pass</span>"}</div>`;w.appendChild(c);S.appendChild(w);});
+  document.getElementById("fvh").innerHTML=`<b>${s.name}</b> ${s.w}×${s.h} · ${G.row?G.row.version_id+" "+G.row.lang+" (separate tiles)":pairRows().map(r=>r.lang).join(" + ")}${m?" · master "+m.name+" "+m.a.w+"×"+m.a.h:""} · ${FV.i+1}/${GRIDS.length}
+   <span style="flex:1"></span><button class=g id=fvFit>${FV.mode==="fit"?"[Fit]":"Fit"} (1)</button><button class=g id=fv11>${FV.mode==="1:1"?"[1:1]":"1:1"} (0)</button>
+   ${(G.row?[]:["both",...pairRows().map(r=>r.lang)]).map(l=>`<button class=g data-fl=${l}>${FV.lang===l?"["+l+"]":l}</button>`).join("")}<button class=g id=fvPrev>←</button><button class=g id=fvNext>→</button><button class=g id=fvX>Esc ✕</button>`;
+  fvLayout();
+  document.getElementById("fvFit").onclick=()=>{FV.mode="fit";fvLayout();};document.getElementById("fv11").onclick=()=>{FV.mode="1:1";fvLayout();};
+  document.getElementById("fvPrev").onclick=()=>fvStep(-1);document.getElementById("fvNext").onclick=()=>fvStep(1);document.getElementById("fvX").onclick=closeFocus;
+  document.querySelectorAll("[data-fl]").forEach(b=>b.onclick=()=>{FV.lang=b.dataset.fl;renderFocus();});}
+function fvLayout(){const B=document.getElementById("fvb"),S=document.getElementById("fvs");S.style.transform="none";const bw=B.clientWidth,bh=B.clientHeight,sw=S.scrollWidth,sh=S.scrollHeight;
+  FV.z=FV.mode==="fit"?Math.min((bw-40)/sw,(bh-40)/sh):1;FV.x=(bw-sw*FV.z)/2;FV.y=FV.mode==="fit"?(bh-sh*FV.z)/2:20;fvApply();}
+function fvApply(){document.getElementById("fvs").style.transform=`translate(${FV.x}px,${FV.y}px) scale(${FV.z})`;}
+function fvStep(d){if(!GRIDS.length)return;FV.i=(FV.i+d+GRIDS.length)%GRIDS.length;renderFocus();}
+(function(){const B=document.getElementById("fvb");let drag=null;
+  B.addEventListener("wheel",e=>{e.preventDefault();const r=B.getBoundingClientRect(),mx=e.clientX-r.left,my=e.clientY-r.top,k=Math.exp(-e.deltaY*.0015);FV.x=mx-(mx-FV.x)*k;FV.y=my-(my-FV.y)*k;FV.z*=k;FV.mode="zoom";fvApply();},{passive:false});
+  B.addEventListener("mousedown",e=>{drag={x:e.clientX,y:e.clientY,ox:FV.x,oy:FV.y,moved:false};B.style.cursor="grabbing";});
+  addEventListener("mousemove",e=>{if(!drag)return;FV.x=drag.ox+e.clientX-drag.x;FV.y=drag.oy+e.clientY-drag.y;if(Math.abs(e.clientX-drag.x)+Math.abs(e.clientY-drag.y)>3)drag.moved=true;fvApply();});
+  addEventListener("mouseup",e=>{if(drag&&!drag.moved&&e.target===B)closeFocus();drag=null;B.style.cursor="grab";});
+  addEventListener("keydown",e=>{if(!document.getElementById("fv").classList.contains("on"))return;if(e.key==="Escape")closeFocus();else if(e.key==="ArrowRight")fvStep(1);else if(e.key==="ArrowLeft")fvStep(-1);
+    else if(e.key==="1"){FV.mode="fit";fvLayout();}else if(e.key==="0"){FV.mode="1:1";fvLayout();}else return;e.preventDefault();});
+  addEventListener("resize",()=>{if(document.getElementById("fv").classList.contains("on")&&FV.mode!=="zoom")fvLayout();});})();
+function renderStack(){const el=document.getElementById("stackBody");if(!SEL){el.textContent="Select a tile.";return;}
+  const {row,s,k}=SEL,P=plan(row,s),M=P.M;
+  el.innerHTML=`<div class="lay"><h4>0 · Master <span class=small>locked</span></h4><div class=small>1920×1080 · ${MASTER.length} layers · row ${row.version_id}. Source assets are never modified; everything below is parameters.</div></div>
+  <div class="lay"><h4>1 · Rules <span class=small>engine</span></h4><div class=small>${s.name} ${s.w}×${s.h} → class <b>${P.res.orient}</b>, safe margin ${Math.round(P.res.margin)} px${s.kind==="combined"?`, ${s.faces.length} faces (from ${s.source})`:""}${P.res.skipped.length?", skipped: "+P.res.skipped.length:""}</div></div>
+  <div class="lay"><h4>2 · AI decisions <span class=small>auto-applied</span></h4><div id=aiL></div></div>
+  <div class="lay"><h4>3 · Manual overrides <span class=small>pin/stretch only here</span></h4>
+   <div class=row>Headline scale <input type=range id=mS min=.5 max=1.8 step=.05 value=${M.hlScale}><span>${M.hlScale.toFixed(2)}</span></div>
+   <div class=row>Nudge X <input type=range id=mX min=-.3 max=.3 step=.01 value=${M.hlDx}></div><div class=row>Nudge Y <input type=range id=mY min=-.3 max=.3 step=.01 value=${M.hlDy}></div>
+   <div class=small>Pin: headline pinned to its rule anchor; nudges stored as fractions of this size.</div>
+   <div class=row><button class=g id=rM>Revert manual</button><button id=rS>Reset size to rules</button></div></div>`;
+  const aiL=el.querySelector("#aiL");P.D.filter(d=>!d.rule).forEach(d=>{const r=document.createElement("div");r.className="row";const kk=d.global?"*":k;
+    r.innerHTML=`<span title="${d.why.replace(/"/g,"&quot;")}">${d.label}${d.global?" <span class=small>(all sizes)</span>":""}</span>`;const b=document.createElement("button");b.className="g";b.textContent=aiOn(kk,d.id)?"Revert":"Accept";b.onclick=()=>toggleAI(kk,d.id,d.label);r.appendChild(b);aiL.appendChild(r);
+    const w=document.createElement("div");w.className="small";w.textContent=d.why;aiL.appendChild(w);});
+  const sl=(id,f)=>{el.querySelector(id).onchange=e=>setState(`Manual ${f}=${e.target.value} · ${k}`,()=>{ST.manual[k]=Object.assign(man(k),{[f]:+e.target.value});});};
+  sl("#mS","hlScale");sl("#mX","hlDx");sl("#mY","hlDy");
+  el.querySelector("#rM").onclick=()=>setState("Revert manual · "+k,()=>{delete ST.manual[k];});
+  el.querySelector("#rS").onclick=()=>setState("Reset size to rules · "+k,()=>{delete ST.manual[k];ST.ai[k]={};P.D.filter(d=>!d.global).forEach(d=>ST.ai[k][d.id]="reverted");});}
+// ---- Design audit (18 criteria = shared skill dooh-design-audit) ----
+const lumOf=(r,g,b)=>{const f=v=>{v/=255;return v<=.03928?v/12.92:((v+.055)/1.055)**2.4;};return .2126*f(r)+.7152*f(g)+.0722*f(b);};
+function bgLum(row,s,P,r,sa){const q=Math.min(1,240/Math.max(s.w,s.h)),c=document.createElement("canvas");c.width=Math.max(1,Math.round(s.w*q));c.height=Math.max(1,Math.round(s.h*q));const x=c.getContext("2d");x.scale(q,q);
+  const bi=P.ml.findIndex(m=>m.L.kind==="bg");const P2={...P,ml:P.ml.filter((m,i)=>i===bi||m.L.kind==="product"),RECTS:P.RECTS.filter((_,i)=>i===bi||P.ml[i].L.kind==="product"),EXTRA:[],T:{}};draw(x,row,s,P2);
+  if(P.M.scrim){x.fillStyle="rgba(0,0,0,.45)";x.fillRect(r.x,r.y,r.w,r.h);}if(sa){x.fillStyle=`rgba(0,0,0,${sa})`;x.fillRect(r.x,r.y,r.w,r.h);}
+  const d=x.getImageData(Math.floor(r.x*q),Math.floor(r.y*q),Math.max(1,Math.ceil(r.w*q)),Math.max(1,Math.ceil(r.h*q))).data,L=[];for(let i=0;i<d.length;i+=4)L.push(lumOf(d[i],d[i+1],d[i+2]));L.sort((a,b)=>a-b);return L[Math.floor(L.length*.9)]||0;}
+function whitePct(row,s,P){const q=Math.min(1,160/Math.max(s.w,s.h)),c=document.createElement("canvas");c.width=Math.max(1,Math.round(s.w*q));c.height=Math.max(1,Math.round(s.h*q));const x=c.getContext("2d");x.scale(q,q);draw(x,row,s,P);const d=x.getImageData(0,0,c.width,c.height).data;let n=0;for(let i=0;i<d.length;i+=4)if(d[i]>=252&&d[i+1]>=252&&d[i+2]>=252)n++;return n/(d.length/4);}
+const cr=(a,b)=>(Math.max(a,b)+.05)/(Math.min(a,b)+.05);
+function auditInput(row,s,P){const g=id=>P.RECTS[P.ml.findIndex(m=>m.L.kind===id)]||undefined,lead=Adapt.leadingFor(row.headline+row.offer),arab=/[\u0600-\u06FF]/.test(row.headline);
+  const tx=id=>{const t=P.T[id];if(!t)return undefined;const L=MASTER.find(x=>x.id===id);return {r:t.r,font:t.font,lines:t.lines,lead:P.TPL?lead:1.12,allowOverlap:Adapt.allowsOverlap(L.name,L.allowOverlap),contrast:cr(lumOf(245,245,245),bgLum(row,s,P,t.r,P.SCRIM&&P.SCRIM[id])),typeface:FONT,weight:L.weight};};
+  const pxc=P.PXC;const fixC=(t,k)=>{if(t&&pxc&&pxc[k]!=null)t.contrast=pxc[k];return t;};
+  const lg=g("logo");return {id:`${row.version_id} ${row.lang} · ${s.name}`,group:s.name,tw:s.w,th:s.h,cls:P.res.orient,screen:s.name,rtl:row.dir==="rtl",arabic:arab,headline:fixC(tx("headline"),"headline"),offer:fixC(tx("offer"),"offer"),logo:lg,product:g("product"),cta:g("price"),
+    faces:s.faces,extra:P.EXTRA.filter(e=>e.r||e.t).map(e=>e.r||e.t.r),palette:[row.color,"#f5f5f5","#ffcc00","#0b3d91"],brandColor:row.color,price:row.price,tracking:0,mirrored:[],whitePct:whitePct(row,s,P),logoContrast:lg?cr(1,bgLum(row,s,P,lg)):undefined};}
+function campaign(rows,sizes){const tiles=[];rows.forEach(row=>sizes.forEach(s=>{const P=plan(row,s);tiles.push(auditInput(row,s,P));}));return Adapt.auditCampaign(tiles);}
+function applyFix(k,f,P){setState("Audit fix: "+f.label+" · "+k,()=>{const M=Object.assign(man(k),ST.manual[k]||{});
+  if(f.kind==="headlineScale")M.hlScale=+(M.hlScale*Math.min(1.8,f.value||1.1)).toFixed(2);else if(f.kind==="logoScale")M.logoScale=+((M.logoScale||1)*(f.value||.85)).toFixed(2);else if(f.kind==="scrim")M.scrim=true;
+  else if(f.kind==="relayout"||f.kind==="keepClear"||f.kind==="rebreak"){ST.ai[k]=ST.ai[k]||{};["template","kashida","chunk"].forEach(id=>delete ST.ai[k][id]);}
+  ST.manual[k]=M;});}
+function auditTable(a,k,P){return `<table><tr><th>#</th><th>Criterion</th><th>Score</th><th>Measured</th><th>Fix</th></tr>`+a.rows.map(r=>`<tr title="${r.reason.replace(/"/g,"&quot;")}"><td>${r.n}</td><td>${r.name}</td><td style="color:${r.pass?"#9fe3b8":"#ffb89a"}">${r.score} ${r.pass?"PASS":"FAIL"}</td><td class=small>${r.measured}${r.assumed?" <i>(ASSUMED)</i>":""}</td><td>${r.fix?(r.fix.kind==="none"?`<span class=small>${r.fix.label}</span>`:`<button data-fx="${r.n}">${r.fix.label}</button>`):""}</td></tr>`).join("")+`</table>`;}
+function renderAudit(){const el=document.getElementById("audit");if(!el)return;const sizes=SIZES.filter(x=>x.on),C=campaign(SHEET,sizes);LASTC=C;
+  let h=`<div class=small>Campaign (${C.tiles.length} tiles): avg <b>${C.avg}</b> · all-pass ${(C.passRate*100).toFixed(0)}% · top issues: ${C.top.map(t=>t[0]+" ×"+t[1]).join(", ")||"none"}</div><div class=row><button id=exC class=g>Export CSV</button><button id=exH class=g>Export HTML</button></div>`;
+  if(SEL){const a=C.tiles.find(t=>t.id===`${SEL.row.version_id} ${SEL.row.lang} · ${SEL.s.name}`);if(a)h+=`<div class=small><b>${a.id}</b> · score ${a.score} · u=${a.u}px</div>`+auditTable(a,SEL.k);}else h+=`<div class=small>Select a tile for its 19-criterion audit.</div>`;
+  el.innerHTML=h;el.querySelectorAll("[data-fx]").forEach(b=>b.onclick=()=>{const a=C.tiles.find(t=>t.id===`${SEL.row.version_id} ${SEL.row.lang} · ${SEL.s.name}`),r=a.rows.find(x=>x.n==+b.dataset.fx);applyFix(SEL.k,r.fix);});
+  el.querySelector("#exC").onclick=()=>dl("audit.csv","text/csv",Adapt.auditCSV(C));el.querySelector("#exH").onclick=()=>dl("audit.html","text/html",auditHTML(C,"Selected sizes"));}
+let LASTC=null;
+function dl(n,t,txt){const a=document.createElement("a");a.href=URL.createObjectURL(new Blob([txt],{type:t}));a.download=n;a.click();}
+function auditHTML(C,title){return `<!doctype html><meta charset=utf-8><title>DOOH design audit</title><style>body{font:13px system-ui;margin:20px}td,th{border:1px solid #ccc;padding:3px 6px;font-size:12px}table{border-collapse:collapse;margin:6px 0 18px}.f{color:#b3261e;font-weight:600}.p{color:#1e7b3a}</style>
+<h1>DOOH design audit — ${title}</h1><p>${new Date().toLocaleString()} · ${C.tiles.length} tiles · average ${C.avg} · all-criteria pass ${(C.passRate*100).toFixed(0)}% · top issues: ${C.top.map(t=>t[0]+" ×"+t[1]).join(", ")||"none"} · CV hierarchy ${(C.cv.hierarchy*100).toFixed(0)}%, inner gap ${(C.cv.innerGap*100).toFixed(0)}%, logo ${(C.cv.logo*100).toFixed(0)}%. Criteria = skill dooh-design-audit (18 + #19 format playbook, pass ≥80). Legibility uses % of short side (viewing distance ASSUMED).</p>
+<h2>Summary (worst first)</h2><table><tr><th>Tile</th><th>Score</th><th>Fails</th></tr>${C.tiles.slice().sort((a,b)=>a.score-b.score).map(t=>`<tr><td>${t.id}</td><td>${t.score}</td><td>${t.rows.filter(r=>!r.pass).map(r=>r.name).join(", ")}</td></tr>`).join("")}</table>
+${C.tiles.map(t=>`<h3>${t.id} — ${t.score}</h3><table><tr><th>#</th><th>Criterion</th><th>Score</th><th></th><th>Measured</th><th>Reason</th><th>Fix</th></tr>${t.rows.map(r=>`<tr><td>${r.n}</td><td>${r.name}</td><td>${r.score}</td><td class=${r.pass?"p":"f"}>${r.pass?"PASS":"FAIL"}</td><td>${r.measured}${r.assumed?" (ASSUMED)":""}</td><td>${r.reason}</td><td>${r.fix?r.fix.label:""}</td></tr>`).join("")}</table>`).join("")}`;}
+function renderHist(){document.getElementById("hist").innerHTML=HIST.length?HIST.slice().reverse().map(h=>`<div>${h.t} · ${h.label}</div>`).join(""):"<div>No changes yet. Every accept/revert/override lands here; Undo steps back.</div>";}
+function renderSizes(){const q=document.getElementById("q").value.toLowerCase(),el=document.getElementById("sizes");el.innerHTML="";
+  SIZES.filter(s=>!q||(s.name+" "+(s.group||"")+" "+s.w+"x"+s.h).toLowerCase().includes(q)).forEach(s=>{const l=document.createElement("label");l.className="sz";
+   l.innerHTML=`<input type=checkbox ${s.on?"checked":""}> <span>${s.name}</span> <span class=small>${s.w}×${s.h}${s.kind==="combined"?" · combined":""}${s.group?" · "+s.group:""}</span>`;
+   l.querySelector("input").onchange=e=>{s.on=e.target.checked;renderGrid();};el.appendChild(l);});
+  document.getElementById("presetInfo").textContent=`${screens.length} screens + ${combos.length} combined · ${SIZES.filter(x=>x.on).length} ticked${PROB.length?" · "+PROB.join("; "):""}`;}
+function renderSheet(){const cols=Object.keys(SHEET[0]);const t=document.getElementById("sheet");t.innerHTML="<tr>"+cols.map(c=>`<th>${c}</th>`).join("")+"</tr>";
+  SHEET.forEach(row=>{const tr=document.createElement("tr");cols.forEach(c=>{const td=document.createElement("td"),i=document.createElement("input");i.value=row[c];i.dir="auto";i.oninput=()=>{row[c]=i.value;renderGrid();renderStack();};td.appendChild(i);tr.appendChild(td);});t.appendChild(tr);});}
+const TASKS=["Saliency / smart crop","Word split & placement","Layout choice","QA scoring","Auto-tag layers","Needs-review","Outpaint (opt-in, last resort)"],JEV_OK=[1,2,3,4,5];
+document.getElementById("provT").innerHTML="<tr><th>Task</th><th>Provider</th><th>Model / endpoint</th></tr>"+TASKS.map((t,i)=>`<tr><td>${t}</td><td><select>${(i===0?["Local (ONNX)"]:["Local (Ollama/LM Studio)","Claude","Grok (xAI)","GPT (OpenAI)"].concat(JEV_OK.includes(i)?["Jev AI (cloud)"]:[])).map(o=>`<option>${o}</option>`).join("")}</select></td><td><input placeholder="${i===0?"u2net / BASNet ONNX (ASSUMED)":"e.g. qwen2.5:7b — key field disabled in mock"}" disabled style="width:100%"></td></tr>`).join("");
+document.getElementById("thr").onchange=e=>{CFG.thr=+e.target.value;renderGrid();renderStack&&renderStack();};document.getElementById("provBtn").onclick=()=>document.getElementById("prov").showModal();document.getElementById("provClose").onclick=()=>document.getElementById("prov").close();
+document.getElementById("q").oninput=renderSizes;
+document.getElementById("exportAll").onclick=()=>{let n=0;SHEET.forEach(r=>SIZES.filter(s=>s.on).forEach(s=>setTimeout(()=>exportPNG(r,s),300*n++)));};
+document.getElementById("layers").textContent=MASTER.map(L=>L.name+(L.bind?"  ← {"+L.bind+"}":"")+(Adapt.autoTag(L.name,L.box,MW,MH)?"  (untagged → AI auto-tag)":"")).join("\n");
+
+// ---- Paste screens: same rules as AE_ScreenManager_Unified_V2_6.jsx (+ WxH) ----
+function renderUnmatched(r){const el=document.getElementById("unmatched");el.innerHTML="";
+  r.unmatched.forEach(u=>{const d=document.createElement("div");d.className="row";d.style.borderBottom="1px solid #333";
+    d.innerHTML=`<span class=note>✗ ${u.line.replace(/</g,"&lt;")}</span>`;const box=document.createElement("span");
+    if(u.size){const b=document.createElement("button");b.className="g";b.textContent=`Add ${u.size[0]}×${u.size[1]} as custom`;
+      b.onclick=()=>{SIZES.push({name:u.name||`Custom ${u.size[0]}x${u.size[1]}`,w:u.size[0],h:u.size[1],group:"Custom (pasted)",source:"paste",kind:"screen",on:true});d.remove();renderSizes();renderAll();};box.appendChild(b);}
+    (u.candidates||[]).slice(0,4).forEach(i=>{const b=document.createElement("button");b.className="g";b.textContent=SIZES[i].name;b.title="Same size — pick this preset";b.onclick=()=>{SIZES[i].on=true;d.remove();renderSizes();renderAll();};box.appendChild(b);});
+    if(!u.size&&!u.candidates){box.innerHTML="<span class=small>no size in line — add WxH to create a custom</span>";}
+    d.appendChild(box);el.appendChild(d);});}
+document.getElementById("pasteGo").onclick=()=>{const r=Adapt.matchPastedScreens(document.getElementById("paste").value,SIZES);const st=document.getElementById("pasteStatus");
+  if(!r.lines.length){st.textContent="Paste at least one screen name.";return;}
+  if(r.selected.length){SIZES.forEach(x=>x.on=false);r.selected.forEach(i=>SIZES[i].on=true);}
+  st.textContent=r.selected.length?`Selected ${r.selected.length} preset${r.selected.length!==1?"s":""}${r.unmatched.length?"; "+r.unmatched.length+" unmatched.":"."}`:"No pasted names matched.";
+  renderUnmatched(r);renderSizes();renderAll();};
+document.getElementById("pasteClr").onclick=()=>{document.getElementById("paste").value="";document.getElementById("unmatched").innerHTML="";document.getElementById("pasteStatus").textContent="Replaces the current selection (same as Screen Manager).";};
+document.getElementById("adaptAll").onclick=()=>{renderAll();document.getElementById("grid").scrollTop=0;};
+if(location.hash==='#paste'){document.getElementById("paste").value="1. Boulevard Bridge\nThuraya Combined\n- Ring Road\n1080x1920\nMystery Mall\t1234 x 567\nMupi";setTimeout(()=>document.getElementById("pasteGo").click(),30);}
+document.getElementById("gap").oninput=e=>{CFG.gap=Math.max(0,+e.target.value||0)/100;renderAll();};
+document.getElementById("ovl").innerHTML=MASTER.filter(L=>L.kind==="text").map(L=>`<label class=sz><input type=checkbox data-id=${L.id}> allow ${L.id} to overlap product</label>`).join("");
+document.querySelectorAll("#ovl input").forEach(i=>i.onchange=()=>{MASTER.find(L=>L.id===i.dataset.id).allowOverlap=i.checked;renderAll();});
+
+// ---- #ba=<preset name>: before (rules v0.3) | after (designer template) for each sheet row ----
+const BA=decodeURIComponent((location.hash.match(/^#ba=(.+)$/)||[])[1]||"");
+if(BA){const z=SIZES.find(x=>x.name===BA);document.body.innerHTML="";document.body.style.cssText="background:#1b1b1d;color:#ddd;font:14px system-ui;padding:14px";
+  const box=Math.min(1600/(2*z.w),380/z.h);const h=document.createElement("h2");h.style.margin="0 0 8px";h.textContent=`${z.name} ${z.w}×${z.h} · class ${Adapt.targetOrient(z.w,z.h)}${z.faces&&z.faces.length>1?" · combined "+z.faces.length+" faces":""}`;document.body.appendChild(h);
+  SHEET.forEach(row=>{const line=document.createElement("div");line.style.cssText="display:flex;gap:24px;margin-bottom:14px;align-items:flex-end";
+    [false,true].forEach(t=>{const c=document.createElement("canvas"),q=Math.min(780/z.w,360/z.h);c.width=z.w*q;c.height=z.h*q;const ctx=c.getContext("2d");ctx.scale(q,q);const P=draw(ctx,row,z,null,t);
+      const d=document.createElement("div");d.appendChild(c);const l=document.createElement("div");l.style.fontSize="12px";l.innerHTML=`<b>${t?"AFTER · designer template":"BEFORE · rules only"}</b> · ${row.version_id} ${row.lang} · Design ${P.ds.total}${P.ds.notes.length?" · <span style=color:#e0a040>"+P.ds.notes.join("; ")+"</span>":""}`;d.appendChild(l);line.appendChild(d);});
+    document.body.appendChild(line);});
+  throw "ba-mode";}
+function renderAll(){renderGrid();renderStack();renderHist();}
+if(location.hash==='#auditall'){const C=campaign(SHEET,SIZES);document.open();document.write(auditHTML(C,'all M2R presets ('+SIZES.length+' sizes × '+SHEET.length+' versions)')+'<pre id=csv style=display:none>'+Adapt.auditCSV(C).replace(/&/g,'&amp;').replace(/</g,'&lt;')+'</pre>');document.close();}
+if(location.hash.startsWith('#audit=')){const nm=decodeURIComponent(location.hash.slice(7)),z=SIZES.find(x=>x.name===nm);if(z){z.on=true;SEL={row:SHEET[0],s:z,k:keyOf(SHEET[0],z)};renderAll();if(location.search.includes('fix')){const a=campaign([SHEET[0]],[z]).tiles[0],f=a.rows.find(r=>!r.pass&&r.fix&&r.fix.kind!=='none');if(f)applyFix(SEL.k,f.fix);}}}
+if(location.hash==='#demo'){const r=SHEET[1],z=SIZES.find(x=>x.name==='Al Salam Mall');SEL={row:r,s:z,k:keyOf(r,z)};setState('Manual hlScale=1.1 · '+SEL.k,()=>{ST.manual[SEL.k]={hlScale:1.1};});toggleAI(keyOf(SHEET[0],SIZES.find(x=>x.name==='1st Ring Road')),'chunk','word split');}
+if(location.hash==='#prov')setTimeout(()=>document.getElementById('provBtn').click(),50);
+renderSizes();renderSheet();(document.fonts?document.fonts.ready:Promise.resolve()).then(renderAll);renderAll();
+
+// ---------- Artwork import (PSD via ag-psd, SVG, PDF via pdf.js, PhotoCraft manifest / VectorCraft JSON) ----------
+
+function artIn(base){if(!ART.an)return base;const r=ART.an.rules.filter(x=>x.on!==false);const o=Adapt.applyArtRules(base,r);return o;}
+function fontOK(f){const c=document.createElement("canvas").getContext("2d"),t="mmmmmmmmmmlli 0123";return ["monospace","serif"].some(fb=>{c.font=`40px ${fb}`;const a=c.measureText(t).width;c.font=`40px "${f}",${fb}`;return c.measureText(t).width!==a;});}
+function artLoad(a,thumb){const fonts=[...new Set(JSON.stringify(a.layers).match(/"font":"[^"]+"/g)||[])].map(x=>x.slice(8,-1));const an=Adapt.analyseArtwork(a,fonts.filter(fontOK).concat(["__none__"]));pxFixStyle(a,an);let i=ARTS.findIndex(x=>x.a===a);if(i<0){const lr=an.rules.find(r=>r.key==="lang");ARTS.push({a,an,name:(a.source&&a.source.file)||"master",thumb:thumb||(a.composite?a.composite.toDataURL("image/jpeg",.6):null),lang:lr?lr.value:""});i=ARTS.length-1;}else ARTS[i].an=an;ACT=i;ART=ARTS[i];artShow();renderAll();}
+function artShow(){ART=ARTS[ACT]||{a:null,an:null};const B=document.getElementById("artBox");if(!ART.an){B.innerHTML="No artwork imported: template + library defaults apply.";return;}const {roles,rules,warnings}=ART.an,a=ART.a;
+  const RO=["bg","product","logo","headline","offer","price","legal","kv","ignore"];
+  B.innerHTML=`<b>${a.source.file}</b> (${a.source.format}, ${a.w}×${a.h}, ${roles.length} layers linked to source)`+(warnings.length?`<div style="color:#f90">⚠ ${warnings.join("<br>⚠ ")}</div>`:"")+
+  `<div><b>Roles</b> (auto-tagged, confirm each)</div>`+roles.map((r,i)=>`<div class=row>${r.name.slice(0,22)} <select data-ri=${i} class=s>${RO.map(o=>`<option ${o===r.role?"selected":""}>${o}</option>`).join("")}</select> <label><input type=checkbox data-rc=${i} ${r.confirmed?"checked":""}>ok</label> <span class=note title="${r.why}">${Math.round(r.confidence*100)}%</span></div>`).join("")+
+  `<div><b>Inferred rules</b> (override templates; edit or untick)</div>`+rules.map((r,i)=>`<div class=row><label><input type=checkbox data-ro=${i} ${r.on!==false?"checked":""}> ${r.key}</label> <input class=s data-rv=${i} value="${Array.isArray(r.value)?r.value.join(","):r.value}" style="width:90px"> <span class=note>${r.why} → ${r.overrides}</span></div>`).join("")+
+  `<div style="display:flex;gap:4px;margin-top:4px"><button id=artReanalyse class=g>Re-analyse with my roles</button><button id=expEC class=g>EffectCraft comps JSON</button><button id=expEN class=g>EncodeCraft job JSON</button></div>`;
+  B.querySelectorAll("[data-ri]").forEach(e=>e.onchange=()=>{const r=roles[+e.dataset.ri];r.role=e.value;r.confirmed=true;r.why="user";});
+  B.querySelectorAll("[data-rc]").forEach(e=>e.onchange=()=>{roles[+e.dataset.rc].confirmed=e.checked;});
+  B.querySelectorAll("[data-ro]").forEach(e=>e.onchange=()=>{rules[+e.dataset.ro].on=e.checked;renderAll();});
+  B.querySelectorAll("[data-rv]").forEach(e=>e.onchange=()=>{const r=rules[+e.dataset.rv];r.value=typeof r.value==="number"?+e.value:typeof r.value==="boolean"?e.value==="true":Array.isArray(r.value)?e.value.split(",").map(Number):e.value;r.edited=true;renderAll();});
+  document.getElementById("artReanalyse").onclick=()=>{// user roles become @tags on the layers, then re-run
+    const walk=ls=>ls.forEach(l=>{const r=roles.find(x=>x.id===l.id);if(r&&r.confirmed&&r.role!=="ignore"&&!/@\w+/.test(l.name))l.name+=" @"+(r.role==="price"?"cta":r.role);if(l.children)walk(l.children);});walk(ART.a.layers);artLoad(ART.a);};
+  const sizes=()=>SIZES.filter(s=>s.on).map(s=>({name:s.name,w:s.w,h:s.h}));
+  document.getElementById("expEC").onclick=()=>dl("effectcraft-comps.json",Adapt.effectCraftComps(SHEET.map((r,i)=>({id:"v"+String(i+1).padStart(2,"0"),lang:r.dir==="rtl"?"AR":"EN",rtl:r.dir==="rtl"})),sizes(),(v,s)=>Adapt.compose(artIn({tw:s.w,th:s.h,rtl:v.rtl,texts:{headline:"Headline",offer:"Offer"},measure:{headline:x=>x.length*.6,offer:x=>x.length*.55},productAspect:640/720,logoAspect:300/110}))));
+  document.getElementById("expEN").onclick=()=>dl("encodecraft-job.json",Adapt.encodeCraftJob("~/Projects/campaign.ecproj","Main",sizes()));}
+function dl(n,o){const u=URL.createObjectURL(new Blob([JSON.stringify(o,null,2)],{type:"application/json"}));const a=document.createElement("a");a.href=u;a.download=n;a.click();}
+/** Layer pixels come without layer effects. Bake an enabled Color Overlay (solidFill) into the pixels so raster text with a white overlay renders as in Photoshop. Other effects are not rendered (reported in analysis). */
+function bakeOverlays(ls){for(const l of ls||[]){bakeOverlays(l.children);if(!l.canvas||!l.effects)continue;const en=k=>[].concat(l.effects[k]||[]).find(e=>e&&e.enabled);
+  const f=en("solidFill");if(f){const g=l.canvas.getContext("2d"),c=f.color||{};g.save();g.globalCompositeOperation="source-atop";g.globalAlpha=f.opacity??1;g.fillStyle=`rgb(${c.r|0},${c.g|0},${c.b|0})`;g.fillRect(0,0,l.canvas.width,l.canvas.height);g.restore();}
+  const out=bakeFx(l.canvas,{dropShadow:en("dropShadow"),outerGlow:en("outerGlow"),stroke:en("stroke")});if(out){l.canvas=out.c;l.left-=out.pad;l.top-=out.pad;l.right=l.left+out.c.width;l.bottom=l.top+out.c.height;}}}
+/** Draw outer glow, drop shadow and stroke (outside/center) around a layer's pixels. Canvas grows by `pad`. Approximations: glow/shadow = canvas blur of the silhouette (size ≈ blur), spread/choke, contours and noise ignored. */
+function bakeFx(src,fx){const px=v=>v==null?0:typeof v==="number"?v:+v.value||0,col=(c,a)=>`rgba(${(c&&c.r)|0},${(c&&c.g)|0},${(c&&c.b)|0},${a??1})`;const ds=fx.dropShadow,og=fx.outerGlow,st=fx.stroke;if(!ds&&!og&&!st)return null;
+  const dsz=ds?px(ds.size)+px(ds.distance):0,gsz=og?px(og.size):0,ssz=st?px(st.size):0,pad=Math.ceil(Math.max(dsz,gsz,ssz)+2);
+  const c=document.createElement("canvas");c.width=src.width+2*pad;c.height=src.height+2*pad;const g=c.getContext("2d");
+  const sil=(color)=>{const t=document.createElement("canvas");t.width=src.width;t.height=src.height;const k=t.getContext("2d");k.drawImage(src,0,0);k.globalCompositeOperation="source-in";k.fillStyle=color;k.fillRect(0,0,t.width,t.height);return t;};
+  if(og){g.save();g.globalAlpha=og.opacity??1;g.filter=`blur(${px(og.size)/2}px)`;const s1=sil(col(og.color||{r:255,g:255,b:190}));g.drawImage(s1,pad,pad);g.drawImage(s1,pad,pad);g.restore();}
+  if(ds){const a=(ds.angle??120)*Math.PI/180,d=px(ds.distance);g.save();g.globalAlpha=ds.opacity??.75;g.filter=`blur(${px(ds.size)/2}px)`;g.drawImage(sil(col(ds.color)),pad-Math.cos(a)*d,pad+Math.sin(a)*d);g.restore();}
+  if(st){const r=px(st.size)*(st.position==="inside"?0:st.position==="center"?.5:1),s1=sil(col(st.color||st.fillColor,1));g.save();g.globalAlpha=st.opacity??1;const n=Math.max(12,Math.ceil(r*2));for(let i=0;i<n;i++){const t=i/n*2*Math.PI;g.drawImage(s1,pad+Math.cos(t)*r,pad+Math.sin(t)*r);}g.restore();}
+  g.drawImage(src,pad,pad);return {c,pad};}
+window.fxTest=function(){const s=document.createElement("canvas");s.width=40;s.height=20;const k=s.getContext("2d");k.fillStyle="#fff";k.fillRect(10,5,20,10);
+  const o=bakeFx(s,{dropShadow:{enabled:true,color:{r:0,g:0,b:0},opacity:1,angle:90,distance:{value:6},size:{value:0}},stroke:{enabled:true,size:{value:2},position:"outside",color:{r:255,g:0,b:0}},outerGlow:{enabled:true,size:{value:4},color:{r:0,g:255,b:0},opacity:1}});
+  const d=(x,y)=>Array.from(o.c.getContext("2d").getImageData(x+o.pad,y+o.pad,1,1).data);return {pad:o.pad,size:[o.c.width,o.c.height],center:d(20,10),stroke:d(20,4),shadow:d(20,19),glow:d(5,10)};};
+function psdFromBuf(buf,file){const p=agPsd.readPsd(new Uint8Array(buf),{skipLayerImageData:false,skipThumbnail:true,skipCompositeImageData:false});bakeOverlays(p.children);const a=Adapt.fromAgPsd(p,file);if(p.canvas)Object.defineProperty(a,"composite",{value:p.canvas,enumerable:false});return a;}
+async function pdfFromBuf(buf,file){if(!window.pdfjsLib){await import("https://cdn.jsdelivr.net/npm/pdfjs-dist@4.6.82/build/pdf.min.mjs").then(m=>{window.pdfjsLib=m;m.GlobalWorkerOptions.workerSrc="https://cdn.jsdelivr.net/npm/pdfjs-dist@4.6.82/build/pdf.worker.min.mjs";});}
+  const d=await pdfjsLib.getDocument({data:buf}).promise,pg=await d.getPage(1),vp=pg.getViewport({scale:1}),tc=await pg.getTextContent();return Adapt.fromPdfText(tc.items.filter(i=>i.str&&i.str.trim()),vp.width,vp.height,file);}
+async function importOne(f){const ext=f.name.split(".").pop().toLowerCase();const B=document.getElementById("artBox");
+  try{if(ext==="svg"){const t=await f.text();artLoad(Adapt.fromSVG(t,f.name),"data:image/svg+xml;base64,"+btoa(unescape(encodeURIComponent(t))));}
+    else if(["png","jpg","jpeg","webp"].includes(ext)){const u=await new Promise(r=>{const fr=new FileReader();fr.onload=()=>r(fr.result);fr.readAsDataURL(f);});const im=new Image();await new Promise((r,j)=>{im.onload=r;im.onerror=j;im.src=u;});
+      artLoad(Adapt.fromSVG(`<svg width="${im.naturalWidth}" height="${im.naturalHeight}" viewBox="0 0 ${im.naturalWidth} ${im.naturalHeight}"><image id="${f.name.replace(/"/g,"")}" x="0" y="0" width="${im.naturalWidth}" height="${im.naturalHeight}"/></svg>`,f.name),u);}
+    else if(ext==="psd"||ext==="psb")artLoad(psdFromBuf(await f.arrayBuffer(),f.name));else if(ext==="pdf"||ext==="ai")artLoad(await pdfFromBuf(await f.arrayBuffer(),f.name));
+    else if(ext==="json"||ext==="vectorcraft"||ext==="pcraft"){const j=JSON.parse(await f.text());if(j.format==="vectorcraft"){const r=Adapt.vectorcraftRoute(j);if(r.route==="pdf"){const b=Uint8Array.from(atob(j.pdf.data),c=>c.charCodeAt(0));artLoad(await pdfFromBuf(b.buffer,f.name));}else B.textContent="VectorCraft file without PDF stream: export SVG from VectorCraft, then import (ASSUMED route).";}else artLoad(Adapt.fromPcraftManifest(j,f.name));}
+    else B.textContent="Not supported in the prototype yet: "+ext+" (see SPEC Supported inputs).";}catch(err){B.textContent="Import failed ("+f.name+"): "+err.message;}}
+async function importFiles(fs){for(const f of fs)await importOne(f);}
+document.getElementById("artFile").onchange=e=>{importFiles([...e.target.files]);e.target.value="";};
+(function(){let n=0;const D=document.getElementById("drop");addEventListener("dragenter",e=>{if(e.dataTransfer&&[...e.dataTransfer.types].includes("Files")){n++;D.style.display="flex";}});
+  addEventListener("dragleave",()=>{if(--n<=0){n=0;D.style.display="none";}});addEventListener("dragover",e=>e.preventDefault());
+  addEventListener("drop",e=>{e.preventDefault();n=0;D.style.display="none";if(e.dataTransfer.files.length)importFiles([...e.dataTransfer.files]);});})();
+document.getElementById("artPsd").onclick=()=>{const b=Uint8Array.from(atob(window.SAMPLE_PSD_B64),c=>c.charCodeAt(0));artLoad(psdFromBuf(b.buffer,"sample.psd"));};
+document.getElementById("artSvg").onclick=()=>artLoad(Adapt.fromSVG(window.SAMPLE_SVG,"sample.svg"));
+document.getElementById("artOff").onclick=()=>{ARTS=[];ACT=0;ST.mov={};ART={a:null,an:null};artShow();renderAll();};
+window.sampleDemo=async function(){document.getElementById("artPsd").click();};
+window.sampleSheet=function(){const out=[];SIZES.forEach(s=>SHEET.forEach(row=>{const c=document.createElement("canvas");const q=Math.min(1,600/Math.max(s.w,s.h));c.width=Math.max(1,Math.round(s.w*q));c.height=Math.max(1,Math.round(s.h*q));const g=c.getContext("2d");g.scale(q,q);
+  const P=draw(g,row,s);const a=Adapt.auditTile?null:null;const C=Adapt.auditCampaign([auditInput(row,s,P)]).tiles[0];out.push({pxc:P.PXC,gap:P.PXR&&P.PXR.offGapPx,U:P.PXR&&Math.round(P.PXR.gapU||0),s:s.name,w:s.w,h:s.h,lang:row.lang,master:ARTS[masterIdx(s,row)].name,q:P.PXQ||{},score:C.score,fails:C.rows.filter(r=>!r.pass).map(r=>r.name),png:c.toDataURL("image/jpeg",.8)});}));return out;};
+window.multiDemo=function(){const mk=(w,h,n)=>{const t=`<svg width="${w}" height="${h}" viewBox="0 0 ${w} ${h}"><rect id="bg" x="0" y="0" width="${w}" height="${h}" fill="#0b3d91"/><text id="headline" x="${w*.06}" y="${h*.3}" font-size="${Math.round(Math.min(w,h)*.12)}" fill="#fff">SUMMER SALE</text></svg>`;return new File([t],n,{type:"image/svg+xml"});};
+  return importFiles([mk(1920,1080,"master_wide_1920x1080.svg"),mk(1080,1920,"master_tall_1080x1920.svg"),mk(3840,480,"master_ribbon_3840x480.svg")]);};
+if(location.hash==="#fx")setTimeout(()=>{const p=document.createElement("pre");p.id="fx";p.textContent=JSON.stringify(window.fxTest());document.body.appendChild(p);},200);
+if(/^#sample/.test(location.hash)){const all=/all/.test(location.hash);if(!all){const pick=["1.7HD","1st Ring Road","Kuwait Gate","Al Salam Mall","Marina - Palm Trees (6 screens)","Thuraya_Full","Piccadilly_Sync","Avenues Gate Right Side"];SIZES.forEach(s=>s.on=pick.includes(s.name));renderSizes();}
+  if(/sep/.test(location.hash))GV="sep";else GV="pairs";setTimeout(()=>window.sampleDemo().then(()=>{if(/sheet/.test(location.hash)){const pre=document.createElement("pre");pre.id="sample-sheet";pre.textContent=JSON.stringify(window.sampleSheet());document.body.appendChild(pre);}if(/focus/.test(location.hash))setTimeout(()=>openFocus(+(location.hash.match(/focus(\d+)/)||[0,0])[1]),300);}),300);}
+if(/^#(multi|focus|pairs|sep)/.test(location.hash)){if(/sep/.test(location.hash))GV="sep";else if(/pairs|focus$/.test(location.hash))GV="pairs";const pick=["1.7HD","1st Ring Road","Kuwait Gate","Hawally","Marina - Palm Trees (6 screens)","Al Salam Mall"];SIZES.forEach(s=>s.on=pick.includes(s.name));renderSizes();
+  setTimeout(()=>window.multiDemo().then(()=>{if(/focus/.test(location.hash))setTimeout(()=>openFocus(1),200);}),300);}
+if(location.hash==="#artpsd")setTimeout(()=>document.getElementById("artPsd").click(),300);if(location.hash==="#artsvg")setTimeout(()=>document.getElementById("artSvg").click(),300);
+</script></body></html>
