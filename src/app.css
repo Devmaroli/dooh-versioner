@@ -80,3 +80,14 @@ body{background:#0c1420}.workspace-tabs{flex-wrap:wrap}.workspace-tabs button{bo
 .tagger-controls{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:16px}.tagger-list{display:flex;gap:7px;overflow-x:auto;margin-top:18px;padding-top:12px;border-top:1px solid #33445b}
 .tagger-list button{background:#1c2c42;white-space:nowrap;display:flex;flex-direction:column;gap:4px;text-align:left}.tagger-list button span{font-size:11px;color:#aabbd0}.tagger-list button.selected{outline:2px solid #8778ed}
 @media(max-width:750px){.tagger-body{grid-template-columns:1fr}}
+
+/* Quiet, intentional controls: content first, chrome second. */
+.layer-behavior{margin-top:18px;padding:16px;background:#162238;border:1px solid #324660;border-radius:12px;display:grid;gap:12px}
+.layer-behavior h4{font-size:14px;font-weight:650;margin:0;color:#f0f5ff}
+.layer-behavior label{display:flex;align-items:center;justify-content:space-between;gap:15px;color:#c5d1e3}
+.layer-behavior label:first-of-type{justify-content:flex-start}
+.layer-behavior select{min-width:180px;max-width:65%;background:#0d1728;border:1px solid #435876;border-radius:8px;padding:9px;color:#fff}
+.layer-behavior input[type=checkbox]{accent-color:#8b7cf4;width:17px;height:17px}
+.layer-behavior small{color:#93a7c1;line-height:1.5}
+button:focus-visible,select:focus-visible,input:focus-visible{outline:2px solid #b3a7ff;outline-offset:3px}
+@media(prefers-reduced-motion:no-preference){button{transition:background-color .16s ease,border-color .16s ease,transform .16s ease}button:not(:disabled):active{transform:scale(.985)}}
