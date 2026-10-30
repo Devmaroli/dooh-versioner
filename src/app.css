@@ -97,3 +97,7 @@ button:focus-visible,select:focus-visible,input:focus-visible{outline:2px solid 
 .workspace-tabs { overflow-x: auto; }
 .workspace-tabs button { white-space: nowrap; }
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation: none !important; transition: none !important; } }
+
+.adaptation-tile { display: flex; flex-direction: column; gap: 7px; }
+.adaptation-tile > small { color: #b1bed2; }
+.adaptation-tile > .ghost { min-height: 34px; font-size: 12px; }

@@ -66,3 +66,7 @@ The Layers panel now opens first in the right inspector, before History/source p
 ## Illustrator source and multi-selection — 2026-10-30
 
 The top of Layers now includes a real headline-preparation/upgrade action and concise Ctrl/Shift guidance. Row, name, thumbnail and checkbox selection share the range model; modifier clicks on the canvas select without moving. Vector-backed pieces have explicit source labels. Existing palette and interaction states remain. The actual IKEA PSD was checked for embedded Illustrator content; the renderer preserves that source instead of presenting pixel separation as vector recovery. User visual approval remains pending.
+
+## Per-size refinement — 2026-10-30
+
+Generated artwork now opens the same focused editor on double-click, with an explicit Refine button as an accessible alternative. Back/Escape return to the gallery. The focused header names the screen, dimensions and language; the Refine workflow step is functional. Screen-specific approval labels reuse established colours and typography. No new editor styling or new visual assets were introduced. User visual review remains pending.
