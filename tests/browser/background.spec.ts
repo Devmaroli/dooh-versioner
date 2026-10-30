@@ -1,0 +1,77 @@
+import { approveGuides } from './helpers'
+import { expect, test } from '@playwright/test'
+import fs from 'node:fs'
+import { unzipSync } from 'fflate'
+
+test('IKEA background rectangle constrains preview/export pixels and survives refresh', async ({ page }) => {
+  const fixture = process.env.IKEA_PSD
+  test.skip(!fixture || !fs.existsSync(fixture), 'Set IKEA_PSD to the private local fixture.')
+  const errors: string[] = []
+  page.on('pageerror', error => errors.push(error.message))
+  await page.goto('/')
+  await expect(page.getByText('Saved on this device')).toBeVisible()
+  await page.locator('input[type=file]').setInputFiles(fixture!)
+  await page.getByLabel('Language for ikea.psd').selectOption('EN')
+  await page.getByRole('button', { name: 'Continue to Analyse' }).click()
+  const rail = page.getByRole('complementary', { name: 'Artwork layers' })
+  await expect(rail.getByRole('button', { name: /Offer extended/ })).toContainText('Offer / secondary message')
+  await expect(page.getByText('Main headline not identified.', { exact: false })).toBeVisible()
+  await page.locator('.analyse-layer').nth(6).click()
+  await page.getByRole('button', { name: 'Main headline', exact: true }).click()
+  await rail.getByRole('button', { name: /Newspaper 03/ }).click()
+  await page.getByRole('button', { name: 'Draw background area', exact: true }).click()
+  await expect(page.getByRole('button', { name: 'Selected layer', exact: true })).toHaveAttribute('aria-pressed', 'true')
+  await page.getByLabel('View bounds', { exact: true }).selectOption('artboard')
+  await page.getByRole('button', { name: 'Draw background area', exact: true }).click()
+  const artboard = page.getByRole('group', { name: 'Artwork background selection' })
+  await artboard.scrollIntoViewIfNeeded()
+  const box = (await artboard.boundingBox())!
+  const sidebar = (await rail.boundingBox())!
+  expect(sidebar.x).toBeGreaterThan(box.x + box.width)
+  // Reverse-direction drag tests coordinate normalization and actual mouse capture.
+  await page.mouse.move(box.x + box.width * .7, box.y + box.height * .3)
+  await page.mouse.down()
+  await page.mouse.move(box.x + box.width * .5, box.y + box.height * .08, { steps: 8 })
+  await page.mouse.up()
+  await expect(page.locator('.background-marquee.is-draft')).toBeVisible()
+  await expect(page.getByRole('spinbutton', { name: 'X', exact: true })).toHaveValue('960')
+  await page.getByRole('button', { name: 'Use this background area', exact: true }).click()
+  await expect(page.locator('.background-status')).toContainText('Background area saved')
+  await page.evaluate(() => window.scrollTo(0, 0))
+  await page.screenshot({ path: 'work/background-selected.png', fullPage: true })
+  await approveGuides(page)
+  const tall = page.locator('.pair').filter({ has: page.getByRole('heading', { name: '1st Ring Road 1008×5184' }) }).locator('canvas')
+  const after = await tall.evaluate((canvas: HTMLCanvasElement) => Array.from(canvas.getContext('2d')!.getImageData(2, 2, 1, 1).data))
+  expect(Math.max(...after.slice(0, 3)) - Math.min(...after.slice(0, 3))).toBeLessThan(50)
+  expect(after[3]).toBe(255)
+  const downloading = page.waitForEvent('download')
+  page.once('dialog', dialog => dialog.accept())
+  await page.getByRole('button', { name: 'Export review ZIP', exact: true }).click()
+  const zip = unzipSync(fs.readFileSync((await (await downloading).path())!))
+  const png = zip['EN_1st_Ring_Road_1008x5184.png']
+  expect(png).toBeDefined()
+  const edge = await page.evaluate(async bytes => {
+    const bitmap = await createImageBitmap(new Blob([new Uint8Array(bytes)], { type: 'image/png' }))
+    const canvas = document.createElement('canvas'); canvas.width = bitmap.width; canvas.height = bitmap.height
+    canvas.getContext('2d')!.drawImage(bitmap, 0, 0)
+    return Array.from(canvas.getContext('2d')!.getImageData(2, 2, 1, 1).data)
+  }, Array.from(png))
+  expect(Math.max(...edge.slice(0, 3)) - Math.min(...edge.slice(0, 3))).toBeLessThan(50)
+  expect(edge[3]).toBe(255)
+  await expect(page.getByText('Saved on this device')).toBeVisible()
+  await page.reload()
+  await page.getByRole('button', { name: 'Continue to Analyse' }).click()
+  await expect(page.locator('.background-status')).toContainText('Saved area:')
+  await rail.getByRole('button', { name: /Newspaper 03/ }).click()
+  await page.getByRole('button', { name: 'Selected layer', exact: true }).click()
+  await page.getByLabel('View bounds', { exact: true }).selectOption('artboard')
+  const savedStyle = await page.locator('.background-marquee').getAttribute('style')
+  await page.getByRole('button', { name: 'Draw background area', exact: true }).click()
+  await artboard.focus(); await page.keyboard.press('Escape')
+  await expect(page.locator('.background-marquee')).toHaveAttribute('style', savedStyle!)
+  await page.getByRole('button', { name: 'Clear background area', exact: true }).click()
+  await expect(page.locator('.background-marquee')).toHaveCount(0)
+  await page.setViewportSize({ width: 700, height: 950 })
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
+  expect(errors).toEqual([])
+})

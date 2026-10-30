@@ -6,6 +6,6 @@ export default defineConfig({
   publicDir: false,
   test: {
     environment: 'node',
-    include: ['src/engine/__tests__/**/*.test.js'],
+    include: ['src/engine/__tests__/**/*.test.{js,ts}'],
   },
 })

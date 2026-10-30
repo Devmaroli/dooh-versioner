@@ -1707,6 +1707,14 @@ var Adapt = (() => {
           role = "legal";
           why = "small / legal wording";
           c = 0.7;
+        } else if (/\b(headline|tagline|slogan)\b/.test(n)) {
+          role = "headline";
+          why = "name identifies campaign headline";
+          c = 0.85;
+        } else if (/\b(offer|promotion|promo)\b/i.test(n + " " + t) || /\b(extended|valid)\s+until\b/i.test(t)) {
+          role = "offer";
+          why = "offer wording; remains secondary even when it is the largest editable text";
+          c = 0.85;
         } else if (texts[0] === l) {
           role = "headline";
           why = "largest text layer";
@@ -1890,6 +1898,13 @@ var Adapt = (() => {
       const box = [l.left || 0, l.top || 0, (l.right || 0) - (l.left || 0), (l.bottom || 0) - (l.top || 0)], st = l.text?.style || {}, fc = st.fillColor;
       const kind = l.children ? "group" : l.text ? "text" : l.placedLayer ? "smart" : l.vectorMask && !l.canvas ? "shape" : "image";
       const out = { id: "p" + i++, name: l.name || "Layer", kind, box, hidden: !!l.hidden, hasMask: !!(l.mask || l.vectorMask), src: `${file}#${l.name}` };
+      const embedded=l.placedLayer?.type==='vector'&&(psd.linkedFiles||[]).find(f=>f.id===l.placedLayer.id&&f.data?.length&&String.fromCharCode(...f.data.slice(0,5))==='%PDF-')
+      if(embedded)Object.defineProperty(out,'vectorPdf',{value:{data:embedded.data,transform:l.placedLayer.transform,page:l.placedLayer.pageNumber||1},enumerable:false})
+      out.fillOpacity = l.fillOpacity ?? 1;
+      out.locks = { transparency: !!l.protected?.transparency, pixels: !!l.protected?.composite, position: !!l.protected?.position, artboards: !!l.protected?.artboards, all: !!l.protected?.all };
+      if(l.effects) out.effects = structuredClone(l.effects);
+      if(l.mask) { out.mask = { kind: 'bitmap', reference: out.id, enabled: !l.mask.disabled, linked: true, sourceRect: { x: l.mask.left || 0, y: l.mask.top || 0, w: (l.mask.right || 0)-(l.mask.left || 0), h: (l.mask.bottom || 0)-(l.mask.top || 0) }, defaultColor: l.mask.defaultColor ?? 255 }; if(l.mask.canvas) Object.defineProperty(out,'maskPx',{value:l.mask.canvas,enumerable:false}); }
+      out.sourceBlend = l.blendMode || (l.children ? "pass through" : "normal"); out.sourceOpacity = l.opacity ?? 1;
       if (l.blendMode && l.blendMode !== "normal" && l.blendMode !== "pass through") out.blend = l.blendMode;
       if (typeof l.opacity === "number" && l.opacity < 1) out.opacity = l.opacity;
       if (l.canvas) Object.defineProperty(out, "px", { value: l.canvas, enumerable: false, writable: true });
