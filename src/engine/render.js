@@ -165,7 +165,7 @@ function pxContrast(ctx,m,P){const lum=(r,g,b)=>{const f=v=>{v/=255;return v<=.0
  * built-in roles. Silently dropping those layers is worse than a safe fallback.
  */
 function unplacedVisibleLayers(m){
-  const visible=flatL(m.a.layers).filter(l=>l.px&&!l.hidden&&l.box&&l.box[2]>0&&l.box[3]>0);
+  const visible=flatL(m.a.layers).filter(l=>l.px&&!l.hidden&&!(l.children&&l.children.length)&&l.box&&l.box[2]>0&&l.box[3]>0);
   const placed=new Set(['bg','product','headline','offer','logo','price'].flatMap(role=>roleLayers(m,role)));
   return visible.filter(l=>!placed.has(l));
 }
