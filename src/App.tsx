@@ -67,6 +67,7 @@ function TileView({
 }
 
 export function App() {
+  const [workspace, setWorkspace] = useState<'import' | 'adapt'>('import')
   const [tick, setTick] = useState(0)
   const [query, setQuery] = useState('')
   const [picked, setPicked] = useState<string[]>(DEFAULT_ON)
@@ -141,14 +142,15 @@ export function App() {
   return (
     <>
       <header>
-        <b>DOOH versioner</b>
+        <b>DOOH Creative Studio</b>
+        <nav className="workspace-tabs" aria-label="Workspace"><button type="button" className={workspace === "import" ? "active" : ""} onClick={() => setWorkspace("import")}>01 · Import</button><button type="button" className={workspace === "adapt" ? "active" : ""} onClick={() => setWorkspace("adapt")}>02 · Adapt & Review</button></nav>
         <span className="chip">v1.5 engine</span>
         <span className="spacer" />
         <button type="button" className="ghost" disabled={!selected.length || busy} onClick={exportZip}>
           {busy ? 'Exporting…' : 'Export PNG zip'}
         </button>
       </header>
-      <div className="layout">
+      {workspace === "import" ? <section className="import-studio"><div className="import-heading"><span className="eyebrow">STEP 01 / CREATIVE PREPARATION</span><h1>Start with a great master.</h1><p>Bring English and Arabic artwork together. Check what was imported before adapting to any screen.</p></div><div className="import-columns"><div className="import-card import-upload" onDragOver={(e) => e.preventDefault()} onDrop={(e) => {e.preventDefault(); if(e.dataTransfer.files.length) void takeFiles(e.dataTransfer.files)}}><div className="import-icon">↑</div><h2>Drop your creative masters</h2><p>PSD, PSB, SVG, PNG, JPG or WebP · Multiple files supported</p><label className="import-file-button">Choose artwork<input type="file" multiple accept=".png,.jpg,.jpeg,.webp,.svg,.psd,.psb" onChange={(e) => {if(e.target.files?.length) void takeFiles(e.target.files); e.target.value=""}} /></label><p className="import-tip">Tip: Name files with _EN or _AR to map languages automatically.</p><div className="sample-actions"><button type="button" className="ghost" onClick={() => {loadSampleSvg();setTick(n=>n+1)}}>Try sample SVG</button><button type="button" className="ghost" onClick={() => {loadSamplePsd();setTick(n=>n+1)}}>Try sample PSD</button></div></div><div className="import-card"><div className="import-card-top"><h2>Imported masters</h2><span className="chip">{ARTS.length} assets</span></div>{ARTS.length ? <div className="import-assets">{ARTS.map((art,i)=><div className="import-asset" key={i}><span className="asset-mark">▧</span><div><strong>{art.name}</strong><small>{art.a.w} × {art.a.h} px</small></div><span className={"chip "+(art.lang||"")}>{art.lang || "Unmapped"}</span></div>)}</div> : <div className="import-empty">No artwork imported yet. Your files will appear here for review.</div>}<div className="import-checks"><h3>Preflight</h3><p>✓ Supported formats: PSD / PSB / SVG / raster</p><p>{ARTS.some(a=>a.lang==="EN")?"✓":"○"} English master {ARTS.some(a=>a.lang==="EN")?"detected":"not detected"}</p><p>{ARTS.some(a=>a.lang==="AR")?"✓":"○"} Arabic master {ARTS.some(a=>a.lang==="AR")?"detected":"not detected"}</p><small>Language is inferred from filenames; semantic layer detection is not yet available.</small></div></div></div>{err && <p className="err">{err}</p>}<div className="import-footer"><span>{ARTS.length ? `${ARTS.length} master(s) ready to preview` : "You can also continue with the built-in template"}</span><button type="button" onClick={() => setWorkspace("adapt")}>Continue to Adapt →</button></div></section> : <div className="layout">
         <aside>
           <div
             className="drop"
@@ -243,6 +245,7 @@ export function App() {
           </div>
         </main>
       </div>
+      }
       {focus ? (
         <div className="focus" role="dialog" onClick={() => setFocus(null)}>
           <header onClick={(e) => e.stopPropagation()}>
