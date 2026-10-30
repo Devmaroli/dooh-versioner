@@ -69,3 +69,14 @@ input[type='search'] { width: 100%; background: #0f1115; color: inherit; border:
 
 /* Six-step Creative Studio */
 body{background:#0c1420}.workspace-tabs{flex-wrap:wrap}.workspace-tabs button{border:1px solid #33445d;border-radius:20px}.workspace-tabs button.active{background:#5346ae;border-color:#8179e9}.studio-intro{padding:24px;background:#162135;border-bottom:1px solid #33445d}.studio-intro h1{font-size:26px;margin:8px 0}.studio-intro p{color:#a8b8d0}.workflow-actions{display:flex;justify-content:flex-end;gap:10px;margin-top:12px}.analysis-summary{display:flex;flex-wrap:wrap;gap:12px;margin:15px 0}.analysis-card{display:flex;flex-direction:column;gap:5px;padding:14px;border:1px solid #40516b;border-radius:10px;background:#1c293d}.analysis-card span{color:#acbad0}.remove-master{background:#47303d;color:#ffd3d3;white-space:nowrap}.progress-status{padding:10px;background:#19364b}.studio-workspace .layout{min-height:70vh}@media(max-width:900px){.studio-workspace .layout{grid-template-columns:1fr}.workspace-tabs{order:3;width:100%}}
+
+.analysis-picker{margin:18px 0}.analysis-picker>label{margin-right:12px;color:#b7c9e5}.analysis-picker select{background:#101b2d;border:1px solid #496080;color:white;border-radius:8px;padding:9px;max-width:100%}
+.tagger{margin-top:16px;border:1px solid #344969;border-radius:14px;background:#111c2e;padding:18px}
+.tagger-heading{display:flex;justify-content:space-between;align-items:center;gap:12px}.tagger-heading h2{color:#fff;text-transform:none;font-size:18px;margin:0}.tagger-heading p{color:#aebdd0}
+.tagger-body{display:grid;grid-template-columns:270px 1fr;gap:22px;margin-top:15px}.tagger-visual{display:flex;flex-direction:column;gap:8px}.tagger-visual small{color:#99abc5}
+.layer-preview{max-width:100%;background:repeating-conic-gradient(#384255 0% 25%,#202a3a 0% 50%) 50%/20px 20px;border-radius:9px}
+.tagger-question h3{font-size:20px;margin:0}.tagger-question p{color:#b1bed2}
+.tag-options{display:grid;grid-template-columns:repeat(auto-fit,minmax(155px,1fr));gap:8px}.tag-options button{background:#23344d;border:1px solid #3e5373;text-align:left;padding:11px}.tag-options button.chosen{background:#5549b2;border-color:#9c90ff}
+.tagger-controls{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:16px}.tagger-list{display:flex;gap:7px;overflow-x:auto;margin-top:18px;padding-top:12px;border-top:1px solid #33445b}
+.tagger-list button{background:#1c2c42;white-space:nowrap;display:flex;flex-direction:column;gap:4px;text-align:left}.tagger-list button span{font-size:11px;color:#aabbd0}.tagger-list button.selected{outline:2px solid #8778ed}
+@media(max-width:750px){.tagger-body{grid-template-columns:1fr}}
