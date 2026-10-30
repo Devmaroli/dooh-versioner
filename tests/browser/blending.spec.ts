@@ -47,7 +47,7 @@ test('PSD appearance imports into controls, blends once against background, pers
   await expect(mode).toHaveValue('screen'); await expect(opacity).toHaveValue('50')
   await expect(mode.locator('optgroup')).toHaveCount(6); await expect(mode.locator('option')).toHaveCount(27)
   await page.getByLabel('Width (%)', { exact: true }).fill('50'); await page.getByLabel('X position (%)', { exact: true }).fill('10'); await page.getByLabel('Y position (%)', { exact: true }).fill('10')
-  const sample = () => page.locator('.calibration-canvas-frame canvas').evaluate((c: HTMLCanvasElement) => Array.from(c.getContext('2d')!.getImageData(Math.floor(c.width * .2), Math.floor(c.height * .2), 1, 1).data))
+  const sample = () => page.locator('.calibration-canvas-frame .proof-canvas canvas').evaluate((c: HTMLCanvasElement) => Array.from(c.getContext('2d')!.getImageData(Math.floor(c.width * .2), Math.floor(c.height * .2), 1, 1).data))
   const close = (actual: number[], expected: number[]) => actual.forEach((v, i) => expect(Math.abs(v - expected[i])).toBeLessThanOrEqual(2))
   close(await sample(), [135,141,168,255])
   await mode.selectOption('linear-dodge'); close(await sample(), [160,160,180,255])

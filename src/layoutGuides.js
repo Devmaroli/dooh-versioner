@@ -1,3 +1,4 @@
+import { frameBounds, rectBounds } from './graphics/artworkTransforms'
 import { effectiveVisible, ancestors } from './layerPanelModel'
 import { layerStyle, BLEND_MODES } from './blending.js'
 import { stackOrder } from './stack.js'
@@ -157,9 +158,10 @@ export function guideFindings(art, screen, layout, proof = proofForScreen(art,sc
   const background = proof?.backgroundTransform
   const stack = proof?.layerOrder || [], bgIndex = stack.indexOf('__background')
   if (bgIndex >= 0 && layout.some(u => stack.indexOf(u.id) > bgIndex)) issues.push({ blocked: layout.some(u => u.required && stack.indexOf(u.id) > bgIndex), message: 'The background is above foreground layers. Check for obscured content; required layers must remain visible.' })
+  if(proof?.transforms?.__background)issues.push({blocked:false,message:'The background has an affine transform. Inspect all canvas edges for uncovered areas.'})
   if (background && (background.scale < 100 || background.offsetX || background.offsetY)) issues.push({ blocked: false, message: 'Background has a free transform. Check uncovered or transparent canvas edges before approval.' })
   for (const unit of layout) {
-    const f = unit.frame
+    const f = frameBounds(unit.frame,screen,proof?.transforms?.[unit.id])
     if (f.x < 0 || f.y < 0 || f.x + f.w > 1.00001 || f.y + f.h > 1.00001) issues.push({ blocked: !!unit.required, message: `${unit.name} extends outside the canvas.${unit.required ? ' Required content must be fully visible before approval.' : ' Inspect clipping before approval.'}` })
   }
   for (const link of art.layerLinks || []) {
@@ -175,11 +177,11 @@ export function guideFindings(art, screen, layout, proof = proofForScreen(art,sc
     if (c.required && !present) issues.push({ blocked: true, message: `Required layer ${allLayers(art).find(l => l.id === id)?.name || id} is hidden or excluded.` })
   }
   for (let i = 0; i < layout.length; i++) for (let j = i + 1; j < layout.length; j++) {
-    const a = layout[i].frame, b = layout[j].frame
+    const a = frameBounds(layout[i].frame,screen,proof?.transforms?.[layout[i].id]), b = frameBounds(layout[j].frame,screen,proof?.transforms?.[layout[j].id])
     if (Math.min(a.x + a.w, b.x + b.w) - Math.max(a.x, b.x) > .005 && Math.min(a.y + a.h, b.y + b.h) - Math.max(a.y, b.y) > .005) issues.push({ blocked: false, message: `${layout[i].name} overlaps ${layout[j].name}. Inspect before approval.` })
   }
   if (!art.backgroundRegion) issues.push({ blocked: false, message: 'No reusable background patch confirmed. Inspect background quality.' })
-  const border = borderGeometry(art, screen, layout, proof)
+  const originalBorder = borderGeometry(art, screen, layout, proof), border=originalBorder?rectBounds(originalBorder,proof?.transforms?.__border):null
   if (border && (border.x < 0 || border.y < 0 || border.x + border.w > screen.w || border.y + border.h > screen.h)) issues.push({ blocked: false, message: 'The border extends outside the canvas. Inspect its visible edges.' })
   if (border && (border.w <= 0 || border.h <= 0)) issues.push({ blocked: true, message: 'The stamp leaves no usable space for the border. Move or scale it.' })
   if (border) for (const unit of layout.filter(u => u.role !== 'stamp')) {

@@ -19,7 +19,7 @@ test('seven complete edits undo/redo with persistent history and default move/sc
   await expect(handle).toBeVisible()
   const beforeWidth = Number(await page.getByLabel('Width (%)', { exact: true }).inputValue()), b = (await handle.boundingBox())!
   await page.mouse.move(b.x + 7, b.y + 7); await page.mouse.down(); await page.mouse.move(b.x + 27, b.y + 27, { steps: 8 }); await page.mouse.up()
-  expect(Number(await page.getByLabel('Width (%)', { exact: true }).inputValue())).toBeGreaterThan(beforeWidth)
+  await expect.poll(async()=>Number(await page.getByLabel('Width (%)', { exact: true }).inputValue())).toBeGreaterThan(beforeWidth)
   await undo.click()
   expect(Number(await page.getByLabel('Width (%)', { exact: true }).inputValue())).toBeCloseTo(beforeWidth, 1)
   await expect(page.getByText('Saved on this device')).toBeVisible()

@@ -8,6 +8,7 @@
     "build": "vite build",
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
+    "typecheck:transform": "tsc -p tsconfig.free-transform.json",
     "test:browser": "playwright test"
   },
   "dependencies": {

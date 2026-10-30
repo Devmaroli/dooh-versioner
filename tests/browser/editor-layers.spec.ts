@@ -47,13 +47,13 @@ test('actual source rows, background, border and anchored stamp/logo link are us
   await page.getByRole('button', { name: /Newspaper 03.*Background/ }).click()
   await expect(page.getByRole('heading', { name: 'Original background', exact: true })).toBeVisible()
   await expect(page.getByLabel('X position (%)', { exact: true })).toHaveCount(0)
-  const beforeBackground = await page.locator('.calibration-canvas-frame canvas').evaluate((c: HTMLCanvasElement) => c.toDataURL())
+  const beforeBackground = await page.locator('.calibration-canvas-frame .proof-canvas canvas').evaluate((c: HTMLCanvasElement) => c.toDataURL())
   await page.getByRole('button', { name: 'Scale S', exact: true }).click()
   const bgHandle = page.getByRole('button', { name: 'Scale from bottom right', exact: true }), handleBox = (await bgHandle.boundingBox())!
   await page.mouse.move(handleBox.x + 7, handleBox.y + 7); await page.mouse.down(); await page.mouse.move(handleBox.x + 27, handleBox.y + 27, { steps: 4 }); await page.mouse.up()
-  expect(Number(await page.getByLabel('Background scale (%)', { exact: true }).inputValue())).toBeGreaterThan(100)
+  await expect.poll(async()=>Number(await page.getByLabel('Background scale (%)', { exact: true }).inputValue())).toBeGreaterThan(100)
   await page.getByLabel('Background scale (%)', { exact: true }).fill('200')
-  const afterBackground = await page.locator('.calibration-canvas-frame canvas').evaluate((c: HTMLCanvasElement) => c.toDataURL())
+  const afterBackground = await page.locator('.calibration-canvas-frame .proof-canvas canvas').evaluate((c: HTMLCanvasElement) => c.toDataURL())
   expect(afterBackground).not.toBe(beforeBackground)
   await page.getByRole('button', { name: 'Move V', exact: true }).click()
   const canvasBox = (await page.locator('.calibration-canvas-frame').boundingBox())!
@@ -65,14 +65,14 @@ test('actual source rows, background, border and anchored stamp/logo link are us
   await page.getByRole('button', { name: /Original border.*Vector rectangle/ }).click()
   await page.getByLabel('Border thickness (this layout, source px)', { exact: true }).fill('11')
   const borderX = page.getByLabel('Border X (%)', { exact: true }), borderWidth = page.getByLabel('Border width (%)', { exact: true })
-  const beforeX = Number(await borderX.inputValue()), selection = (await page.locator('.scale-selection').boundingBox())!
+  const beforeX = Number(await borderX.inputValue()), nw=(await page.getByRole('button',{name:'Scale from top left',exact:true}).boundingBox())!,se=(await page.getByRole('button',{name:'Scale from bottom right',exact:true}).boundingBox())!,selection={x:nw.x+nw.width/2,y:nw.y+nw.height/2,width:se.x-nw.x,height:se.y-nw.y}
   await page.getByRole('button', { name: 'Move V', exact: true }).click()
   await page.mouse.move(selection.x + selection.width * .95, selection.y + selection.height * .55); await page.mouse.down()
   await page.mouse.move(selection.x + selection.width * .95 - 10, selection.y + selection.height * .55 - 10, { steps: 5 }); await page.mouse.up()
-  expect(Number(await borderX.inputValue())).toBeLessThan(beforeX)
+  await expect.poll(async()=>Number(await borderX.inputValue())).toBeLessThan(beforeX)
   const initialWidth = Number(await borderWidth.inputValue()), handle = (await page.getByRole('button', { name: 'Scale from bottom right', exact: true }).boundingBox())!
   await page.mouse.move(handle.x + 7, handle.y + 7); await page.mouse.down(); await page.mouse.move(handle.x - 10, handle.y - 10, { steps: 5 }); await page.mouse.up()
-  expect(Number(await borderWidth.inputValue())).toBeLessThan(initialWidth)
+  await expect.poll(async()=>Number(await borderWidth.inputValue())).toBeLessThan(initialWidth)
   await page.getByRole('button', { name: 'Undo', exact: true }).click()
   expect(Number(await borderWidth.inputValue())).toBeCloseTo(initialWidth, 1)
   await page.getByRole('button', { name: 'Redo', exact: true }).click()

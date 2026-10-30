@@ -33,7 +33,7 @@ test('layer thumbnails, locks, fill, masks, styles, groups and adjustments affec
   await expect(page.getByLabel('X position (%)',{exact:true})).toBeDisabled()
   await page.getByRole('button',{name:'Lock Position',exact:true}).click()
   await page.getByLabel('Width (%)',{exact:true}).fill('50');await page.getByLabel('X position (%)',{exact:true}).fill('10');await page.getByLabel('Y position (%)',{exact:true}).fill('10')
-  const sample=(x=.2,y=.2)=>page.locator('.calibration-canvas-frame canvas').evaluate((c:HTMLCanvasElement,p)=>Array.from(c.getContext('2d')!.getImageData(Math.floor(c.width*p.x),Math.floor(c.height*p.y),1,1).data),{x,y})
+  const sample=(x=.2,y=.2)=>page.locator('.calibration-canvas-frame .proof-canvas canvas').evaluate((c:HTMLCanvasElement,p)=>Array.from(c.getContext('2d')!.getImageData(Math.floor(c.width*p.x),Math.floor(c.height*p.y),1,1).data),{x,y})
   expect(await sample()).toEqual([160,80,40,255])
   await page.getByRole('button',{name:'Hide layer Top headline',exact:true}).click();expect(await sample()).toEqual([80,120,160,255])
   await page.getByRole('button',{name:'Show layer Top headline',exact:true}).click()

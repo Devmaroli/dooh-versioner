@@ -106,3 +106,19 @@
 .headline-source-preview canvas { width: 100%; height: 120px; object-fit: contain; background: repeating-conic-gradient(#ffffff 0% 25%, #c8c8c8 0% 50%) 50%/12px 12px; }
 .preparation-result:empty { display: none; }
 @media(max-width:760px) { .calibration-stage-area { grid-template-columns: 64px minmax(0,1fr); min-height: 60vh; } .editor-toolbox { padding: 8px 4px; } .editor-toolbox > span { display: none; } }
+
+/* Native Canvas gizmo; transparent buttons provide focus and keyboard targets. */
+.free-transform-gizmo { position: absolute; left: 0; top: 0; width: 100%; height: 100%; z-index: 5; pointer-events: none; }
+.transform-hit-handle { z-index: 6; opacity: 0; width: 16px; height: 16px; touch-action: none; }
+.transform-hit-handle:focus-visible { opacity: 1; background: transparent; }
+.rotation-handle { cursor: grab; border-radius: 50%; }
+.calibration-stage { justify-content: safe center; }
+
+.calibration-stage-area { position: relative; }
+
+.guide-object, .transform-hit-handle { transition: none; }
+.guide-object:active { transform: none; }
+.transform-hit-handle:active { transform: translate(-50%, -50%); }
+
+.guide-object.selected { border-color: transparent; outline: none; }
+.guide-object.selected > span { opacity: 0; }

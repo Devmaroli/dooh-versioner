@@ -70,3 +70,6 @@ The top of Layers now includes a real headline-preparation/upgrade action and co
 ## Per-size refinement — 2026-10-30
 
 Generated artwork now opens the same focused editor on double-click, with an explicit Refine button as an accessible alternative. Back/Escape return to the gallery. The focused header names the screen, dimensions and language; the Refine workflow step is functional. Screen-specific approval labels reuse established colours and typography. No new editor styling or new visual assets were introduced. User visual review remains pending.
+
+## Free Transform — 2026-10-31
+Native Canvas handles reuse the existing selection colour. Transparent focusable controls provide keyboard targets, with visible focus rings. The floating gizmo extends outside the composition so background handles remain reachable. Fit selection and opposite-anchor reset are real actions. Chrome interaction tests passed; user visual review remains pending.
