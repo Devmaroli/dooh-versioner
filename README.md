@@ -1,6 +1,6 @@
 # DOOH Versioner
 
-Local Bannerflow-style tool for DOOH ad versioning and auto-resize. One master design is adapted to booked M2R screen sizes and to many versions, including English and Arabic (RTL). This repository is prototype **v1.5**: the static UI, the layout engine, agent skills, and the problem pack.
+Local Bannerflow-style tool for DOOH ad versioning and auto-resize. One master design is adapted to booked sizes and to many versions, including English and Arabic (RTL). This repository is prototype **v1.5**: the static UI, the layout engine, agent skills, and the problem pack.
 
 This is a **private** repository. `samples/real/` and `shots/client-rio` are confidential client artwork (Bolton Group, Rio). The same Rio captures also sit at the repo root as `shots/real-*.png` and `shots/mock-tag-*.png`. Keep them here; do not publish them.
 
