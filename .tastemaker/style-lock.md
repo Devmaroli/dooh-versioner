@@ -73,3 +73,6 @@ Generated artwork now opens the same focused editor on double-click, with an exp
 
 ## Free Transform — 2026-10-31
 Native Canvas handles reuse the existing selection colour. Transparent focusable controls provide keyboard targets, with visible focus rings. The floating gizmo extends outside the composition so background handles remain reachable. Fit selection and opposite-anchor reset are real actions. Chrome interaction tests passed; user visual review remains pending.
+
+## Export formats — 2026-10-31
+Format and alpha controls sit in the Export stage, keeping the workflow header clear. Native selects share existing dark surfaces and focus rings. Format limitations are visible alongside the export action. Lossless output and transparent PNG were checked in Chrome; user visual review remains pending.
