@@ -1,6 +1,6 @@
 # DOOH Versioner
 
-Local Bannerflow-style tool for DOOH ad versioning and auto-resize. One master design is adapted to booked M2R screen sizes and to many versions, including English and Arabic (RTL). This repository is prototype **v1.5**: the static UI, the layout engine, agent skills, and the problem pack.
+Local Bannerflow-style tool for DOOH ad versioning and auto-resize. One master design is adapted to booked sizes and to many versions, including English and Arabic (RTL). This repository is prototype **v1.5**: the static UI, the layout engine, agent skills, and the problem pack.
 
 ## App
 
