@@ -18,6 +18,7 @@ test('scale handles and numerical width keep the selected anchor fixed and retai
   const box = (await handle.boundingBox())!
   await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2); await page.mouse.down()
   await page.mouse.move(box.x + box.width / 2 + 20, box.y + box.height / 2 + 20, { steps: 5 }); await page.mouse.up()
+  await expect.poll(async()=>Number(await width.inputValue())).toBeGreaterThan(30)
   const newWidth = Number(await width.inputValue()), newX = Number(await x.inputValue())
   expect(newWidth).toBeGreaterThan(30)
   expect(newX + newWidth / 2).toBeCloseTo(45, 1)
@@ -35,7 +36,7 @@ test('scale handles and numerical width keep the selected anchor fixed and retai
   const object = page.locator('.guide-object.selected'), objectBox = (await object.boundingBox())!
   await page.mouse.move(objectBox.x + objectBox.width / 2, objectBox.y + objectBox.height / 2); await page.mouse.down()
   await page.mouse.move(objectBox.x + objectBox.width / 2 + 15, objectBox.y + objectBox.height / 2, { steps: 4 }); await page.mouse.up()
-  expect(Number(await x.inputValue())).toBeGreaterThan(newX)
+  await expect.poll(async()=>Number(await x.inputValue())).toBeGreaterThan(newX)
   const beforeNudge = Number(await x.inputValue())
   await page.keyboard.press('Shift+ArrowRight')
   expect(Number(await x.inputValue())).toBeCloseTo(beforeNudge + 10 / 1536 * 100, 1)
