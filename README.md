@@ -2,6 +2,25 @@
 
 Local Bannerflow-style tool for DOOH ad versioning and auto-resize. One master design is adapted to booked M2R screen sizes and to many versions, including English and Arabic (RTL). This repository is prototype **v1.5**: the static UI, the layout engine, agent skills, and the problem pack.
 
+## App
+
+```bash
+npm install
+npm run dev      # Vite, open the printed URL
+npm test         # engine/tests under Vitest
+npm run build    # production bundle in dist/
+```
+
+Upload PNG, JPG, SVG, or PSD masters (language from the filename suffix). Tick screens, review the EN/AR grid, click a tile to enlarge, then export a PNG zip. With no upload, tiles use the prototype's built-in template. Sample SVG and sample PSD buttons load the placeholder artwork already in `src/engine/presets.js`.
+
+| Path | What it is |
+|---|---|
+| `src/engine/adapt.js` | `proto/adapt.js` (layout, kashida, masters, language, multi-face, audit). |
+| `src/engine/presets.js` | `proto/presets.js` (screen JSON plus the sample SVG/PSD). |
+| `src/engine/render.js` | Tile drawing from `proto/index.html`: PSD pixels, colour overlay, drop shadow, glow, stroke, tagline split, language masters. |
+| `src/data/` | Screen list built with the v1.5 importer from the Screen Manager JSON in `src/data/screens/`. |
+| `src/engine/__tests__/` | The checks from `engine/tests/`, run by Vitest. |
+
 ## Folder map
 
 | Path | What it is |
