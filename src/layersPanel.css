@@ -1,0 +1,52 @@
+.layers-panel { border: 1px solid #344969; background: #141820; margin: 12px 0; }
+.lp-heading { display: flex; justify-content: space-between; align-items: center; padding: 10px; gap: 12px; }
+.calibration-controls .lp-heading h2 { margin: 0; }
+.calibration-controls .lp-heading label { margin: 0; font-size: 11px; }
+.lp-filter, .lp-appearance { padding: 8px 10px; border-top: 1px solid #344969; }
+.lp-filter { display: flex; align-items: end; gap: 8px; }
+.calibration-controls .lp-filter label { margin: 0; }
+.lp-filter > input, .lp-filter > select { min-width: 0; width: 55%; }
+.calibration-controls .lp-appearance label { margin: 5px 0; }
+.lp-alpha { display: grid; grid-template-columns: 105px 1fr; gap: 10px; align-items: center; }
+.lp-alpha input[type="number"] { width: 76px; }
+.lp-alpha input[type="range"] { min-width: 0; width: 100%; }
+.lp-locks { display: flex; align-items: center; gap: 5px; padding: 8px 10px; border-top: 1px solid #344969; }
+.lp-locks > span { font-size: 11px; color: #b1bed2; margin-right: auto; }
+.lp-locks button, .lp-footer button { background: transparent; color: #fff; border: 1px solid transparent; width: 32px; min-height: 34px; display: grid; place-items: center; padding: 5px; }
+.lp-locks button[aria-pressed="true"] { background: #a6c6ff; color: #111c2e; border-color: #fff; }
+.calibration-controls .lp-list { max-height: min(42vh, calc(100vh - 610px)); min-height: 180px; margin: 0; padding: 0; overflow: auto; }
+.layers-panel .lp-row { position: relative; display: grid; grid-template-columns: 22px 16px var(--layer-thumbnail-size) minmax(80px,1fr); gap: 6px; align-items: center; padding: 8px 8px 8px calc(8px + var(--layer-depth)*12px); border: 1px solid transparent; border-bottom-color: #344969; }
+.lp-row.selected { background: #23344d; border-color: #a6c6ff; }
+.lp-row[data-drop="before"] { border-top: 3px solid #a6c6ff; }
+.lp-row[data-drop="after"] { border-bottom: 3px solid #a6c6ff; }
+.lp-row[data-drop="inside"] { outline: 2px solid #a6c6ff; outline-offset: -4px; }
+.lp-eye { position: relative; background: transparent; padding: 0; border: 0; color: #fff; min-height: 30px; }
+.lp-eye-slash { position: absolute; width: 24px; height: 2px; background: #fff; transform: rotate(-45deg); left: 0; top: 50%; }
+.lp-thumbnail { min-width: var(--layer-thumbnail-size); width: var(--layer-thumbnail-size); height: var(--layer-thumbnail-size); background: repeating-conic-gradient(#fff 0% 25%, #c8c8c8 0% 50%) 50%/20px 20px; border: 1px solid #99abc5; padding: 0; display: grid; place-items: center; overflow: hidden; }
+.lp-thumbnail canvas, .lp-thumbnail svg { width: 100%; height: 100%; object-fit: contain; background: transparent; }
+.lp-thumbnail > span { color: #111; font-size: 36px; }
+.layers-panel .lp-row.large-thumbnail { grid-template-columns: 22px 16px minmax(var(--layer-thumbnail-size),1fr); }
+.lp-row.large-thumbnail .lp-thumbnail { grid-column: 3; max-width: none; }
+.lp-row.large-thumbnail .lp-row-content { grid-column: 3; }
+.lp-name-line { display: flex; align-items: center; gap: 3px; min-width: 0; }
+.lp-name-line button { padding: 2px; color: #fff; background: transparent; border: 0; }
+.lp-name { text-align: left; overflow-wrap: anywhere; font-size: 12px; flex: 1; }
+.lp-rename { opacity: .7; }
+.calibration-controls .lp-row-content small { font-size: 10px; }
+.lp-submenu summary { font-size: 11px; color: #b1bed2; cursor: pointer; margin: 6px 0; }
+.lp-submenu button { display: block; background: transparent; color: #fff; border: 0; font-size: 10px; padding: 5px 0; }
+.lp-footer { position: sticky; bottom: 0; z-index: 5; display: flex; justify-content: space-between; padding: 7px; background: #141820; border-top: 1px solid #99abc5; }
+.lp-footer button:hover, .lp-locks button:hover { border-color: #99abc5; }
+.lp-footer button:disabled { opacity: .35; }
+.lp-inspector { margin: 10px; padding: 10px; border: 1px solid #99abc5; font-size: 12px; }
+.lp-message { padding: 0 10px; }
+.lp-message:empty { display: none; }
+.lp-empty { padding: 20px; }
+
+.lp-order { display: flex; flex-wrap: wrap; gap: 6px; padding: 6px 10px; font-size: 11px; }
+.lp-order button { font-size: 11px; padding: 5px; }
+.lp-order small { width: 100%; color: #b1bed2; }
+
+.lp-preparation { padding: 0 10px; }
+.lp-preparation button { width: 100%; }
+.lp-selection-help { padding: 0 10px; font-size: 11px; }

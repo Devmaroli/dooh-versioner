@@ -1,0 +1,58 @@
+[
+  {
+    "date": "2026-10-30",
+    "scope": "Analyse editor",
+    "structure": "artboard with right layer rail",
+    "palette": "existing application",
+    "status": "pending-review",
+    "reason": "User requested a background rectangle and Photoshop-like right-hand layer picking; original artwork remains the visual focus."
+  },
+  {
+    "date": "2026-10-30",
+    "scope": "Analyse controls and five calibration editors",
+    "structure": "five-preview gallery with full-screen canvas editor",
+    "palette": "existing application",
+    "status": "pending-review",
+    "reason": "User requested full source bounds, linked multi-selection, visibility/alpha controls, custom five screen set, general edge placement, original-border reconstruction, stamp role and word-level arrangement. Original pixels and logo integrity are preserved."
+  },
+  {
+    "date": "2026-10-30",
+    "scope": "Focused editor tools",
+    "structure": "left tool rail, central canvas, right Layers and Transform inspector",
+    "palette": "existing application",
+    "status": "pending-review",
+    "reason": "User requested working Photoshop-like move/scale tools, nine-point scaling anchors and a single link/unlink button."
+  },
+  {
+    "date": "2026-10-30",
+    "scope": "Editor layer discoverability correction",
+    "structure": "source thumbnail rows with pinned background and border controls",
+    "palette": "existing application",
+    "status": "pending-review",
+    "reason": "User could not find layers, background or border, and could not use Link/Unlink. Semantic roles no longer collapse independent layers."
+  },
+  {
+    "date": "2026-10-30",
+    "scope": "Background scaling and direct artwork picking",
+    "structure": "existing editor with pixel-aware selection and background transform inspector",
+    "palette": "existing application",
+    "status": "pending-review",
+    "reason": "User requested direct artwork-to-layer selection and working background scaling. Controls use the shared export geometry."
+  },
+  {
+    "date": "2026-10-30",
+    "scope": "Layer stack and source preparation",
+    "structure": "explicit reorderable stack with source tools beside active layer selection",
+    "palette": "existing application",
+    "status": "pending-review",
+    "reason": "User requested stack order that affects composition and discoverable border/word preparation in Edit. Tested on the actual IKEA PSD."
+  },
+  {
+    "date": "2026-10-30",
+    "scope": "History and source preparation recovery",
+    "structure": "header Undo/Redo, compact History, persistent preparation readiness, combined bounding-box controls",
+    "palette": "existing application",
+    "status": "pending-review",
+    "reason": "User requested seven undo actions and default move/scale. Live inspection found an unconfirmed headline and a hidden generated-border stack condition; source preparation is now visible and undoable."
+  }
+]
