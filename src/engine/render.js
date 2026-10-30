@@ -348,6 +348,19 @@ export function importRasterCanvas(canvas, name) {
   artLoad(a, canvas.toDataURL('image/jpeg', 0.6))
   return ARTS.length
 }
+/** Remove a user-imported master and invalidate any stored screen assignments. */
+export function removeMaster(index) {
+  if(!Number.isInteger(index)||index<0||index>=ARTS.length)return false
+  ARTS.splice(index,1)
+  if(ST&&ST.mov)for(const key of Object.keys(ST.mov)){
+    const n=ST.mov[key]
+    if(n===index)delete ST.mov[key]
+    else if(typeof n==='number'&&n>index)ST.mov[key]=n-1
+  }
+  ACT=ARTS.length?Math.min(index,ARTS.length-1):-1
+  ART=ACT>=0?ARTS[ACT]:{a:null,an:null}
+  return true
+}
 export function masterFor(screen, row) {
   const i = masterIdx(screen, row)
   return i >= 0 ? ARTS[i] : null
