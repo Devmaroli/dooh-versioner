@@ -1,17 +1,19 @@
-# DOOH Versioner
+# DOOH Creative Studio
 
-Local Bannerflow-style tool for DOOH ad versioning and auto-resize. One master design is adapted to booked sizes and to many versions, including English and Arabic (RTL). This repository is prototype **v1.5**: the static UI, the layout engine, agent skills, and the problem pack.
+Version **1.6.0** provides the React six-stage workflow, source-layer analysis, selected-target layout guides, per-screen refinement with affine transforms, and lossless PNG/PDF or layered PSD export. The local Chrome extension uses the same editor without a server. Legacy prototype files remain for reference.
+
+See [Chrome installation and IT handoff](docs/chrome-extension.md), [security review](docs/security-audit.md), [export formats and PSD limitations](docs/export-formats.md), [selected targets](docs/selected-targets.md), and [Free Transform](docs/free-transform.md).
 
 ## App
 
 ```bash
-npm install
+npm ci          # Node 22.12+ or 24
 npm run dev      # Vite, open the printed URL
 npm test         # engine/tests under Vitest
 npm run build    # production bundle in dist/
 ```
 
-Upload PNG, JPG, SVG, or PSD masters (language from the filename suffix). Tick screens, review the EN/AR grid, click a tile to enlarge, then export a PNG zip. With no upload, tiles use the prototype's built-in template. Sample SVG and sample PSD buttons load the placeholder artwork already in `src/engine/presets.js`.
+Import PSD/PSB, SVG or raster masters, confirm their language and semantic roles, then choose the required screen presets. Approve the selected layout guides and double-click generated tiles to refine each output. Export selected available languages as PNG, PDF or layered PSD ZIP files. Sample SVG and sample PSD buttons load the placeholder artwork already in `src/engine/presets.js`.
 
 | Path | What it is |
 |---|---|
@@ -20,6 +22,16 @@ Upload PNG, JPG, SVG, or PSD masters (language from the filename suffix). Tick s
 | `src/engine/render.js` | Tile drawing from `proto/index.html`: PSD pixels, colour overlay, drop shadow, glow, stroke, tagline split, language masters. |
 | `src/data/` | Screen list built with the v1.5 importer from the Screen Manager JSON in `src/data/screens/`. |
 | `src/engine/__tests__/` | The checks from `engine/tests/`, run by Vitest. |
+
+## Chrome extension
+
+Build the offline Manifest V3 package with `npm run build:extension`. Load the generated `dist-extension/` folder only where your organisation permits unpacked extensions; managed office deployment needs your IT-approved Chrome distribution route. The extension requests no browser/host permissions and opens the editor in a full tab. The toolbar icon uses the selected Adapt artwork, and v1.6.0 is visible in both the launcher and editor.
+
+## Release information
+
+See [v1.6.0 release notes](CHANGELOG.md), the [implementation report](docs/implementation-report-1.6.0.md), and [security audit](docs/security-audit.md). Validation recorded for this release: 79 unit tests, 21 web browser tests, two extension-origin tests, production/extension builds and both typechecks. Full and production dependency scans reported zero known advisories on 2026-10-31. This is a bounded review, not an antivirus certification or a guarantee against unknown vulnerabilities.
+
+PSD adaptations retain independent pixel layers and native blend/opacity; supported original native layers and embedded Illustrator objects are retained separately in a hidden source folder. PDF is a lossless flattened visual export. Review advanced Photoshop fidelity before production.
 
 ## Folder map
 

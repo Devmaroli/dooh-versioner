@@ -97,3 +97,13 @@ button:focus-visible,select:focus-visible,input:focus-visible{outline:2px solid 
 .workspace-tabs { overflow-x: auto; }
 .workspace-tabs button { white-space: nowrap; }
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation: none !important; transition: none !important; } }
+
+.adaptation-tile { display: flex; flex-direction: column; gap: 7px; }
+.adaptation-tile > small { color: #b1bed2; }
+.adaptation-tile > .ghost { min-height: 34px; font-size: 12px; }
+
+.export-options { display:flex; align-items:center; gap:24px; flex-wrap:wrap; margin:20px 0 12px; }.export-options label { display:flex; align-items:center; gap:10px; color:#d0dceb; }.export-options select { background:#0f1928; color:#e8eaf0; border:1px solid #435876; border-radius:6px; padding:9px 12px; font:inherit; }.export-options input[type=checkbox] { accent-color:#8b7cf4; }
+
+.selection-notice { border:1px solid #816941; border-radius:8px; background:#25251f; padding:14px 16px; margin:16px 0; color:#e2dac8; }.selection-notice p { margin:5px 0 10px; color:#c9c4b8; }.selection-notice details { margin:8px 0; }.selection-notice summary,.import-targets>summary { cursor:pointer; }.selection-notice ul { max-height:170px; overflow:auto; padding-left:22px; }.selection-notice small { color:#c9c4b8; }.import-targets { margin-top:24px; }.import-targets>section { padding:12px 0; max-width:600px; }
+
+.app-version { color:#a7b5ca; font-size:11px; white-space:nowrap; }

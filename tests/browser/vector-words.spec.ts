@@ -1,5 +1,5 @@
 import { unzipSync } from 'fflate'
-import { guideNames } from './helpers'
+
 import { test, expect } from '@playwright/test'
 import fs from 'node:fs'
 
@@ -15,7 +15,7 @@ test('IKEA Illustrator smart-object words render from embedded vectors; Ctrl/Shi
   await page.getByRole('button',{name:'Prepare headline words',exact:true}).click()
   const rows=page.locator('.lp-row').filter({hasText:/Word [0-9]+ · embedded vector/})
   await expect(rows).toHaveCount(5)
-  const canvas=page.locator('.calibration-canvas-frame canvas')
+  const canvas=page.locator('.calibration-canvas-frame .proof-canvas canvas')
   await expect(canvas).toHaveAttribute('data-vector-ready','true');await expect(canvas).toHaveAttribute('data-vector-words','5')
   await expect(page.getByRole('alert')).toHaveCount(0)
   const word=(i:number)=>page.getByRole('button',{name:`Select layer Word ${i} · embedded vector`,exact:true})
@@ -38,15 +38,15 @@ test('IKEA Illustrator smart-object words render from embedded vectors; Ctrl/Shi
   const second=await inkPoint(2);await page.keyboard.down('Shift');await page.mouse.click(second.x,second.y);await page.keyboard.up('Shift');await expect(page.locator('.lp-row.selected')).toHaveCount(2)
   const first=await inkPoint(1);await page.keyboard.down('Control');await page.mouse.click(first.x,first.y);await page.keyboard.up('Control');await expect(page.locator('.lp-row.selected')).toHaveCount(1)
   await page.getByRole('heading',{name:'Layers',exact:true}).scrollIntoViewIfNeeded();await page.screenshot({path:'work/vector-words-selection.png'})
-  await page.getByRole('button',{name:'Back to five previews',exact:false}).click();await expect(page.getByText('Saved on this device')).toBeVisible();await page.reload()
+  await page.getByRole('button',{name:'Back to layout previews',exact:false}).click();await expect(page.getByText('Saved on this device')).toBeVisible();await page.reload()
   await page.getByRole('button',{name:/3 · Adapt/}).click();await page.getByRole('button',{name:'Edit Alshaheed - Mupi',exact:true}).click()
   await expect(rows).toHaveCount(5);await expect(canvas).toHaveAttribute('data-vector-ready','true');await expect(canvas).toHaveAttribute('data-vector-words','5');await expect(page.getByRole('alert')).toHaveCount(0)
-  await page.getByRole('button',{name:'Back to five previews',exact:false}).click()
-  for(const name of guideNames){
+  await page.getByRole('button',{name:'Back to layout previews',exact:false}).click()
+  for(const name of await page.locator('.calibration-card h3').allTextContents()){
     await page.getByRole('button',{name:`Edit ${name}`,exact:true}).click()
     for(let i=1;i<=5;i++){await word(i).click();await page.getByLabel('Width (%)',{exact:true}).fill('10');await page.getByLabel('X position (%)',{exact:true}).fill(String(10+(i-1)*15));await page.getByLabel('Y position (%)',{exact:true}).fill('30')}
-    await expect(page.locator('.calibration-canvas-frame canvas')).toHaveAttribute('data-vector-words','5')
-    await page.getByRole('button',{name:'Approve this guide',exact:true}).click();await page.getByRole('button',{name:'Back to five previews',exact:false}).click()
+    await expect(page.locator('.calibration-canvas-frame .proof-canvas canvas')).toHaveAttribute('data-vector-words','5')
+    await page.getByRole('button',{name:'Approve this guide',exact:true}).click();await page.getByRole('button',{name:'Back to layout previews',exact:false}).click()
   }
   await page.getByRole('button',{name:'Use these guides for full adaptation',exact:true}).click()
   const download=page.waitForEvent('download');page.once('dialog',d=>d.accept());await page.getByRole('button',{name:'Export review ZIP',exact:true}).click()
@@ -66,7 +66,7 @@ test('existing pixel word pieces can be upgraded to their embedded Illustrator s
   const before=await page.getByLabel('X position (%)',{exact:true}).inputValue()
   await page.getByRole('button',{name:'Use embedded Illustrator vectors',exact:true}).click()
   await expect(page.locator('.lp-row').filter({hasText:/Word [0-9]+ · embedded vector/})).toHaveCount(5)
-  await expect(page.locator('.calibration-canvas-frame canvas')).toHaveAttribute('data-vector-words','5');await expect(page.getByLabel('X position (%)',{exact:true})).toHaveValue(before)
+  await expect(page.locator('.calibration-canvas-frame .proof-canvas canvas')).toHaveAttribute('data-vector-words','5');await expect(page.getByLabel('X position (%)',{exact:true})).toHaveValue(before)
   await page.getByRole('button',{name:'Undo',exact:true}).click();await expect(page.locator('.lp-row').filter({hasText:/Word [0-9]+ · source pixels/})).toHaveCount(5)
-  await page.getByRole('button',{name:'Redo',exact:true}).click();await expect(page.locator('.calibration-canvas-frame canvas')).toHaveAttribute('data-vector-words','5')
+  await page.getByRole('button',{name:'Redo',exact:true}).click();await expect(page.locator('.calibration-canvas-frame .proof-canvas canvas')).toHaveAttribute('data-vector-words','5')
 })

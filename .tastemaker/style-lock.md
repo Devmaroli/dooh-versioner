@@ -66,3 +66,18 @@ The Layers panel now opens first in the right inspector, before History/source p
 ## Illustrator source and multi-selection — 2026-10-30
 
 The top of Layers now includes a real headline-preparation/upgrade action and concise Ctrl/Shift guidance. Row, name, thumbnail and checkbox selection share the range model; modifier clicks on the canvas select without moving. Vector-backed pieces have explicit source labels. Existing palette and interaction states remain. The actual IKEA PSD was checked for embedded Illustrator content; the renderer preserves that source instead of presenting pixel separation as vector recovery. User visual approval remains pending.
+
+## Per-size refinement — 2026-10-30
+
+Generated artwork now opens the same focused editor on double-click, with an explicit Refine button as an accessible alternative. Back/Escape return to the gallery. The focused header names the screen, dimensions and language; the Refine workflow step is functional. Screen-specific approval labels reuse established colours and typography. No new editor styling or new visual assets were introduced. User visual review remains pending.
+
+## Free Transform — 2026-10-31
+Native Canvas handles reuse the existing selection colour. Transparent focusable controls provide keyboard targets, with visible focus rings. The floating gizmo extends outside the composition so background handles remain reachable. Fit selection and opposite-anchor reset are real actions. Chrome interaction tests passed; user visual review remains pending.
+
+## Export formats — 2026-10-31
+Format and alpha controls sit in the Export stage, keeping the workflow header clear. Native selects share existing dark surfaces and focus rings. Format limitations are visible alongside the export action. Lossless output and transparent PNG were checked in Chrome; user visual review remains pending.
+
+## Target subset and extension — 2026-10-31
+A restrained amber selection notice identifies omitted sizes with explicit text, count and expandable details. Target choices use the existing screen list and exact presets. The extension launcher uses the locked dark palette, a single Open Studio action and visible v1.6.0. Author attribution stays in source comments. Three native SVG icon directions include actual 16/24/32px and monochrome proofs. User icon selection is pending. Self-critique: visual 4, purpose 5, hierarchy 5, specificity 4, restraint 5, variety 4.
+
+The user selected the original Adapt direction (overlapping portrait and landscape frames). It is installed as the extension icon with the requested thinner 7px strokes. The three A refinements remain in design/ as exploration assets.

@@ -1,3 +1,4 @@
+import { frameBounds, rectBounds } from './graphics/artworkTransforms'
 import { effectiveVisible, ancestors } from './layerPanelModel'
 import { layerStyle, BLEND_MODES } from './blending.js'
 import { stackOrder } from './stack.js'
@@ -8,14 +9,24 @@ export const FAMILIES = ['landscape', 'ultrawide', 'ultratall', 'vertical', 'com
 export const GUIDE_PRESETS = ['2.6 Screen', 'Al Salam Mall', 'Al Nassar Tower Vertical', 'Alshaheed - Mupi', 'The Gate Mall Outdoor']
 export function layoutFamily(screen) {
   const ratio = screen.w / screen.h
-  return ratio < .33 ? 'ultratall' : ratio < .85 ? 'vertical' : ratio < 1.8 ? 'compact' : ratio >= 4 ? 'ultrawide' : 'landscape'
+  return ratio < .33 ? 'ultratall' : ratio < .85 ? 'vertical' : ratio < 1.6 ? 'compact' : ratio >= 4 ? 'ultrawide' : 'landscape'
+}
+export const screenProofKey = screen => JSON.stringify([screen.name,screen.w,screen.h])
+export function proofForScreen(art,screen) { return art.calibration?.outputs?.[screenProofKey(screen)] || art.calibration?.proofs?.[layoutFamily(screen)] }
+export function createScreenProof(art,screen) {
+  const guide=art.calibration?.proofs?.[layoutFamily(screen)] || initialProof(art,screen), layout=guideLayout(art,screen,guide)
+  return {...structuredClone(guide),screen:{name:screen.name,w:screen.w,h:screen.h},frames:Object.fromEntries(layout.map(u=>[u.id,{...u.frame}])),sourceSignature:sourceSignature(art),approved:false}
 }
 export function sourceSignature(art) {
   return JSON.stringify(['individual-layers-v2', art.an.roles.map(r => [r.id, r.role, r.confidence === 1 || !!r.confirmed]), art.layerConstraints || {}, art.backgroundRegion || null, art.layerVisibility || {}, art.layerLinks || [], art.layerCrops || {}, art.originalBorder || null, art.wordPieces || []])
 }
-export function calibrationReady(art) {
+export function requiredFamilies(screens) {
+  return screens ? FAMILIES.filter(family => screens.some(screen => layoutFamily(screen) === family)) : FAMILIES
+}
+export function calibrationReady(art, screens) {
   const signature = sourceSignature(art)
-  return !!art.calibration?.enabled && FAMILIES.every(f => art.calibration.proofs[f]?.approved && art.calibration.proofs[f].sourceSignature === signature)
+  const families = requiredFamilies(screens)
+  return !!art.calibration?.enabled && families.length > 0 && families.every(f => art.calibration.proofs[f]?.approved && art.calibration.proofs[f].sourceSignature === signature)
 }
 export function contentUnits(art, detached = [], panel) {
   const visibility = { ...art.layerVisibility }
@@ -100,7 +111,7 @@ export function initialProof(art, screen) {
   }
   return { screen: { name: screen.name, w: screen.w, h: screen.h }, sourceSignature: sourceSignature(art), approved: false, frames }
 }
-export function guideLayout(art, screen, proof = art.calibration?.proofs?.[layoutFamily(screen)]) {
+export function guideLayout(art, screen, proof = proofForScreen(art,screen)) {
   const units = contentUnits(art, proof?.detachedSourceLinks, proof?.panel), base = proof || initialProof(art, screen)
   const frames = { ...base.frames }
   // Preserve the visible arrangement from older implicit role clusters without keeping them linked.
@@ -130,9 +141,9 @@ export function guideLayout(art, screen, proof = art.calibration?.proofs?.[layou
   const order = stackOrder(layout.map(u => u.id), base.layerOrder)
   return layout.sort((a, b) => order.indexOf(a.id) - order.indexOf(b.id))
 }
-export function guideFindings(art, screen, layout) {
+export function guideFindings(art, screen, layout, proof = proofForScreen(art,screen)) {
   const issues = []
-  const proof = art.calibration?.proofs?.[layoutFamily(screen)], sources = allLayers(art)
+  const sources = allLayers(art)
   const complexGroups = !proof?.panel ? sources.filter(l => l.children?.length && ((l.opacity ?? 1) < 1 || !['pass through', 'pass-through'].includes(l.sourceBlend || 'pass through'))) : []
   if (complexGroups.length) issues.push({ blocked: false, message: 'PSD group isolation or group opacity needs visual review. Leaf opacity is inherited; exact Photoshop group-overlap compositing is not guaranteed.' })
   if(proof?.panel)for(const node of proof.panel.nodes){
@@ -148,12 +159,13 @@ export function guideFindings(art, screen, layout) {
     else if (style.opacity < .25) issues.push({ blocked: false, message: `${source?.name || id} has low opacity. Check readability.` })
   }
 
-  const background = art.calibration?.proofs?.[layoutFamily(screen)]?.backgroundTransform
-  const stack = art.calibration?.proofs?.[layoutFamily(screen)]?.layerOrder || [], bgIndex = stack.indexOf('__background')
+  const background = proof?.backgroundTransform
+  const stack = proof?.layerOrder || [], bgIndex = stack.indexOf('__background')
   if (bgIndex >= 0 && layout.some(u => stack.indexOf(u.id) > bgIndex)) issues.push({ blocked: layout.some(u => u.required && stack.indexOf(u.id) > bgIndex), message: 'The background is above foreground layers. Check for obscured content; required layers must remain visible.' })
+  if(proof?.transforms?.__background)issues.push({blocked:false,message:'The background has an affine transform. Inspect all canvas edges for uncovered areas.'})
   if (background && (background.scale < 100 || background.offsetX || background.offsetY)) issues.push({ blocked: false, message: 'Background has a free transform. Check uncovered or transparent canvas edges before approval.' })
   for (const unit of layout) {
-    const f = unit.frame
+    const f = frameBounds(unit.frame,screen,proof?.transforms?.[unit.id])
     if (f.x < 0 || f.y < 0 || f.x + f.w > 1.00001 || f.y + f.h > 1.00001) issues.push({ blocked: !!unit.required, message: `${unit.name} extends outside the canvas.${unit.required ? ' Required content must be fully visible before approval.' : ' Inspect clipping before approval.'}` })
   }
   for (const link of art.layerLinks || []) {
@@ -169,11 +181,11 @@ export function guideFindings(art, screen, layout) {
     if (c.required && !present) issues.push({ blocked: true, message: `Required layer ${allLayers(art).find(l => l.id === id)?.name || id} is hidden or excluded.` })
   }
   for (let i = 0; i < layout.length; i++) for (let j = i + 1; j < layout.length; j++) {
-    const a = layout[i].frame, b = layout[j].frame
+    const a = frameBounds(layout[i].frame,screen,proof?.transforms?.[layout[i].id]), b = frameBounds(layout[j].frame,screen,proof?.transforms?.[layout[j].id])
     if (Math.min(a.x + a.w, b.x + b.w) - Math.max(a.x, b.x) > .005 && Math.min(a.y + a.h, b.y + b.h) - Math.max(a.y, b.y) > .005) issues.push({ blocked: false, message: `${layout[i].name} overlaps ${layout[j].name}. Inspect before approval.` })
   }
   if (!art.backgroundRegion) issues.push({ blocked: false, message: 'No reusable background patch confirmed. Inspect background quality.' })
-  const border = borderGeometry(art, screen, layout, art.calibration?.proofs?.[layoutFamily(screen)])
+  const originalBorder = borderGeometry(art, screen, layout, proof), border=originalBorder?rectBounds(originalBorder,proof?.transforms?.__border):null
   if (border && (border.x < 0 || border.y < 0 || border.x + border.w > screen.w || border.y + border.h > screen.h)) issues.push({ blocked: false, message: 'The border extends outside the canvas. Inspect its visible edges.' })
   if (border && (border.w <= 0 || border.h <= 0)) issues.push({ blocked: true, message: 'The stamp leaves no usable space for the border. Move or scale it.' })
   if (border) for (const unit of layout.filter(u => u.role !== 'stamp')) {

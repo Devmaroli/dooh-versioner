@@ -1,3 +1,5 @@
+import { IDENTITY, apply, inverse, multiply, frameMatrix } from '../graphics/affine'
+import { worldDelta, rectBounds } from '../graphics/artworkTransforms'
 import { renderVectorCrop, vectorRasterKey, releaseEmbeddedVectors } from '../embeddedVectors.js'
 import { preparedLayerSource, clipPanelMask, paintPanelTree, stylePixels } from '../panelCompositor.js'
 import { effectiveVisible, ancestors } from '../layerPanelModel'
@@ -12,7 +14,7 @@ import { backgroundCrop, backgroundFrame } from '../background.js'
 import { pickForeground } from '../picking.js'
 import { drawOriginalBorder, borderGeometry } from '../border.js'
 import { allLayers, drawSourceLayers } from '../artwork.js'
-import { layoutFamily, calibrationReady, guideLayout, guideFindings, sourceSignature } from '../layoutGuides.js'
+import { proofForScreen, screenProofKey, layoutFamily, calibrationReady, guideLayout, guideFindings, sourceSignature } from '../layoutGuides.js'
 import { readPsd } from 'ag-psd'
 import { PRESET_FILES, SAMPLE_PSD_B64, SAMPLE_SVG } from './presets.js'
 
@@ -51,7 +53,7 @@ const AI={W:160,H:90,sal:null};(function(){const s=document.createElement("canva
  for(let y=1;y<AI.H-1;y++)for(let x=1;x<AI.W-1;x++){const i=y*AI.W+x,bl=.299*b[i*4]+.587*b[i*4+1]+.114*b[i*4+2];
   AI.sal[i]=Math.pow(Math.abs(L[i]-bl)+.5*(Math.abs(L[i+1]-L[i-1])+Math.abs(L[i+AI.W]-L[i-AI.W]))+(L[i]>200?40:0),1.5);}})();
 // ---- non-destructive state: master (const) → rules (computed) → AI decisions (status) → manual overrides (params) ----
-const CFG={gap:Adapt.DEFAULT_PRODUCT_GAP,thr:.8},P_ROUTE={};function renderRQ(){const q=Object.entries(P_ROUTE).filter(([,v])=>v.route==="review");const el=document.getElementById("rq");if(el)el.innerHTML=q.length?q.map(([k,v])=>`<div>• ${k.replace("|"," · ")} p=${v.p.toFixed(2)} <span class=small>${v.notes.slice(0,2).join("; ")}</span></div>`).join(""):"Empty — all decisions above threshold.";}const P_rect=(res,i)=>res.rects[i];
+const CFG={gap:Adapt.DEFAULT_PRODUCT_GAP,thr:.8},P_ROUTE={};function renderRQ(){const q=Object.entries(P_ROUTE).filter(([,v])=>v.route==="review"),el=document.getElementById("rq");if(!el)return;el.replaceChildren();if(!q.length){el.textContent="Empty — all decisions above threshold.";return}for(const [key,value] of q){const row=document.createElement("div"),notes=document.createElement("span");row.textContent="• "+key.replace("|"," · ")+" p="+value.p.toFixed(2)+" ";notes.className="small";notes.textContent=value.notes.slice(0,2).join("; ");row.append(notes);el.append(row)}}const P_rect=(res,i)=>res.rects[i];
 var ART={a:null,an:null};
 const ST={ai:{},manual:{},mov:{}},HIST=[];let SEL=null,P_TPL=null;
 const keyOf=(row,s)=>row.version_id+"|"+s.name;
@@ -268,7 +270,7 @@ function drawFlattenedMaster(ctx,s,m){
 }
 function draw(ctx,row,s,P,forceTpl){const tw=s.w,th=s.h;
   if(!P)useMaster(s,row);
-  if(calibrationReady(ART))return drawGuided(ctx,ART,s);
+  if(calibrationReady(ART,[s]))return drawGuided(ctx,ART,s);
   if(ART&&ART.a&&ART.a.source&&ART.a.source.format==='image'&&ART.a.composite){
     drawFlattenedMaster(ctx,s,ART);return P||{PXMODE:'flattened artwork · full creative preserved'};
   }
@@ -301,10 +303,10 @@ function badge(P,d){if(d.rule){const e=document.createElement("span");e.classNam
   e.onclick=ev=>{ev.stopPropagation();toggleAI(k,d.id,d.label);};return e;}
 function tileCanvas(row,s,maxW,maxH){const q=Math.min(maxW/s.w,maxH/s.h),dpr=window.devicePixelRatio||1,c=document.createElement("canvas");
   c.width=Math.max(1,Math.round(s.w*q*dpr));c.height=Math.max(1,Math.round(s.h*q*dpr));c.style.width=s.w*q+"px";c.style.height=s.h*q+"px";
-  const ctx=c.getContext("2d");ctx.scale(q*dpr,q*dpr);const P=draw(ctx,row,s);return {c,P};}
+  const ctx=c.getContext("2d");ctx.scale(q*dpr,q*dpr);const P=draw(ctx,row,s),master=masterFor(s,row);const ready=master&&calibrationReady(master,[s])?prepareVectorLayout(master,s,proofForScreen(master,s),q*dpr,q*dpr).then(()=>{ctx.clearRect(0,0,s.w,s.h);draw(ctx,row,s)}):Promise.resolve();return {c,P,ready};}
 
 let ARTS=[],ACT=0;
-function psdFromBuf(buf,file){const p=readPsd(new Uint8Array(buf),{skipLayerImageData:false,skipThumbnail:true,skipCompositeImageData:false});bakeOverlays(p.children);const a=Adapt.fromAgPsd(p,file);if(p.canvas)Object.defineProperty(a,"composite",{value:p.canvas,enumerable:false});return a;}
+function psdFromBuf(buf,file){const p=readPsd(new Uint8Array(buf),{skipLayerImageData:false,skipThumbnail:true,skipCompositeImageData:false,totalMemoryLimit:256*1024*1024});bakeOverlays(p.children);const a=Adapt.fromAgPsd(p,file);Object.defineProperty(a,"psdBuffer",{value:buf,enumerable:false});if(p.canvas)Object.defineProperty(a,"composite",{value:p.canvas,enumerable:false});return a;}
 function autoIdx(s,row){if(!ARTS.length)return -1;const M=ARTS.map(a=>({w:a.a.w,h:a.a.h,lang:a.lang||""}));return row?Adapt.pickMasterForLang(M,s.w,s.h,row.lang).index:Adapt.pickMaster(M,s.w,s.h).index;}
 function masterIdx(s,row){const o=ST.mov[s.name];if(o!=null&&ARTS[o]&&(!row||!ARTS[o].lang||ARTS[o].lang===row.lang))return o;return autoIdx(s,row);}
 function useMaster(s,row){const i=masterIdx(s,row);ART=i>=0?ARTS[i]:{a:null,an:null};}
@@ -410,14 +412,18 @@ export function masterFor(screen, row) {
 export function renderTile(row, screen, maxW, maxH) {
   return tileCanvas(row, screen, maxW, maxH)
 }
-export async function renderFull(row, screen) {
+export async function renderFull(row, screen, options = {}) {
   const master=masterFor(screen,row)
   if(!master)throw new Error('No '+row.lang+' master is assigned. Import or assign a matching master.')
-  if(!calibrationReady(master))throw new Error('Approve all five calibration guides before batch export.')
-  await prepareVectorLayout(master,screen,master.calibration?.proofs?.[layoutFamily(screen)])
+  if(options.transparentBackground&&master.a.source?.format==='image')throw new Error('Transparent background export requires a separate background layer. This master is flattened.')
+  if(!calibrationReady(master,[screen]))throw new Error('Approve the layout guide required by '+screen.name+' before export.')
+  const output=master.calibration?.outputs?.[screenProofKey(screen)]
+  if(output&&(!output.approved||output.sourceSignature!==sourceSignature(master)))throw new Error(screen.name+': approve this refined adaptation before exporting.')
+  if(output&&guideFindings(master,screen,guideLayout(master,screen,output),output).some(i=>i.blocked))throw new Error(screen.name+': resolve blocking findings before exporting.')
+  await prepareVectorLayout(master,screen,proofForScreen(master,screen))
   const c=document.createElement('canvas');c.width=screen.w;c.height=screen.h
   master.requireVector=true
-  try{draw(c.getContext('2d'),row,screen)}finally{delete master.requireVector}
+  try{drawGuided(c.getContext('2d'),master,screen,proofForScreen(master,screen),null,options.transparentBackground)}finally{delete master.requireVector}
   return c
 }
 export function artLang(entry) {
@@ -425,30 +431,32 @@ export function artLang(entry) {
 }
 
 export async function prepareVectorLayout(art,screen,proof,pixelScale=1,pixelScaleY=pixelScale){
+  proof=proof||proofForScreen(art,screen)
   art.VR=art.VR||new Map()
   const sources=allLayers(art)
   for(const unit of guideLayout(art,screen,proof))for(const layer of sources.filter(l=>unit.layerIds.includes(l.id)&&l.vectorWord)){
-    const w=unit.frame.w*screen.w*pixelScale,h=unit.frame.h*screen.h*pixelScaleY,key=vectorRasterKey(layer,unit.box,w,h)
+    const transform=multiply({a:pixelScale,b:0,c:0,d:pixelScaleY,tx:0,ty:0},multiply(frameMatrix(unit.frame,screen),proof?.transforms?.[unit.id]||IDENTITY)),w=Math.hypot(transform.a,transform.b),h=Math.hypot(transform.c,transform.d),key=vectorRasterKey(layer,unit.box,w,h)
     if(!art.VR.has(key)){const canvas=await renderVectorCrop(layer,unit.box,w,h);if(art.VR.size>=128)art.VR.delete(art.VR.keys().next().value);art.VR.set(key,canvas)}
   }
 }
-function drawGuided(ctx,art,screen,proof){
-  const layout=guideLayout(art,screen,proof),issues=guideFindings(art,screen,layout),background=art.a.source?.format==='image'?null:bgInfo(art),sources=allLayers(art),current=proof || art.calibration?.proofs?.[layoutFamily(screen)];
+function drawGuided(ctx,art,screen,proof,capture,omitBackground=false){
+  const current=proof||proofForScreen(art,screen),layout=guideLayout(art,screen,current),issues=guideFindings(art,screen,layout,current),background=art.a.source?.format==='image'?null:bgInfo(art),sources=allLayers(art).filter(l=>!capture?.sourceId||l.id===capture.sourceId).map(l=>capture?{...l,effectiveHidden:false}:l);
+  const appearance=(...args)=>capture?{blend:"normal",opacity:1}:layerStyle(...args);
   const signature=sourceSignature(art);
   if(art.GU?.signature!==signature)art.GU={signature,units:{}};
   art.PA=art.PA||new Map();
   let vectorWordsRendered=0;
   function targetFor(id){const f=layout.find(u=>u.id===id)?.frame;if(f)return {x:f.x*screen.w,y:f.y*screen.h,w:f.w*screen.w,h:f.h*screen.h};if(id==='__background'&&background)return backgroundFrame(background.source,screen,current?.backgroundTransform);if(id==='__border')return borderGeometry(art,screen,layout,current);return {x:0,y:0,w:screen.w,h:screen.h};}
-  function paint(g,id,node){
+  function paintPixels(g,id,node){
     if(id==='__background'){
-      if(background){const f=targetFor(id),style=layerStyle({...background.L,parentOpacity:current?.panel?1:background.L.parentOpacity},current?.layerStyles?.[id]),rawBox=art.backgroundRegion?backgroundCrop(art.backgroundRegion,background.L,art.a.w,art.a.h):null,box=rawBox||{x:background.L.box[0],y:background.L.box[1],w:background.L.box[2],h:background.L.box[3]},layer={...background.L,px:background.source,box:[box.x,box.y,box.w,box.h],sourceBox:[box.x,box.y,box.w,box.h],crop:null},source=preparedLayerSource(layer,box,node,art.PA)||background.source;
+      if(background){const f=targetFor(id),style=appearance({...background.L,parentOpacity:current?.panel?1:background.L.parentOpacity},current?.layerStyles?.[id]),rawBox=art.backgroundRegion?backgroundCrop(art.backgroundRegion,background.L,art.a.w,art.a.h):null,box=rawBox||{x:background.L.box[0],y:background.L.box[1],w:background.L.box[2],h:background.L.box[3]},layer={...background.L,px:background.source,box:[box.x,box.y,box.w,box.h],sourceBox:[box.x,box.y,box.w,box.h],crop:null},source=preparedLayerSource(layer,box,node,art.PA)||background.source;
         compositeDraw(g,t=>{t.save();clipPanelMask(t,node?.mask,f,screen);t.drawImage(source,f.x,f.y,f.w,f.h);t.restore()},style,f);
       }return;
     }
     if(id==='__border'){
       const f=targetFor(id);if(f){const bounds={x:f.x-f.thickness,y:f.y-f.thickness,w:f.w+2*f.thickness,h:f.h+2*f.thickness};let source=null;
         if(node?.fx?.stroke?.enabled){source=document.createElement('canvas');source.width=Math.max(1,Math.ceil(bounds.w));source.height=Math.max(1,Math.ceil(bounds.h));const t=source.getContext('2d');t.translate(-bounds.x,-bounds.y);drawOriginalBorder(t,art,screen,layout,current);t.resetTransform();stylePixels(source,node.fill,node.fx);}
-        compositeDraw(g,t=>{t.save();clipPanelMask(t,node?.mask,f,screen);if(source)t.drawImage(source,bounds.x,bounds.y,bounds.w,bounds.h);else{t.globalAlpha*=node?.fill??1;drawOriginalBorder(t,art,screen,layout,current);}t.restore()},layerStyle(null,current?.layerStyles?.[id]),bounds);
+        compositeDraw(g,t=>{t.save();clipPanelMask(t,node?.mask,f,screen);if(source)t.drawImage(source,bounds.x,bounds.y,bounds.w,bounds.h);else{t.globalAlpha*=node?.fill??1;drawOriginalBorder(t,art,screen,layout,current);}t.restore()},appearance(null,current?.layerStyles?.[id]),bounds);
       }return;
     }
     const unit=layout.find(u=>u.id===id);if(!unit)return;
@@ -456,26 +464,30 @@ function drawGuided(ctx,art,screen,proof){
     const f=unit.frame,target=targetFor(id);
     if(id==='flattened'){
       const fake={id:'flattened',px:source,box:[0,0,source.width,source.height],fillOpacity:1},material=preparedLayerSource(fake,{x:0,y:0,w:source.width,h:source.height},node,art.PA)||source;
-      compositeDraw(g,t=>{t.save();clipPanelMask(t,node?.mask,target,screen);t.drawImage(material,target.x,target.y,target.w,target.h);t.restore()},layerStyle(null,current?.layerStyles?.flattened),target);
+      compositeDraw(g,t=>{t.save();clipPanelMask(t,node?.mask,target,screen);t.drawImage(material,target.x,target.y,target.w,target.h);t.restore()},appearance(null,current?.layerStyles?.flattened),target);
     }else for(const layer of sources.filter(l=>unit.layerIds.includes(l.id)).reverse()){
-      const scale=Math.abs(g.getTransform().a),vector=layer.vectorWord&&art.VR?.get(vectorRasterKey(layer,unit.box,target.w*scale,target.h*Math.abs(g.getTransform().d)))
+      const view=g.getTransform(),vector=layer.vectorWord&&art.VR?.get(vectorRasterKey(layer,unit.box,target.w*Math.hypot(view.a,view.b),target.h*Math.hypot(view.c,view.d)))
       if(layer.vectorWord&&!vector&&art.requireVector)throw new Error('Vector source preparation is incomplete. Retry the export; no cached-pixel substitution was exported.')
-      if(vector){vectorWordsRendered++;let material=vector;if((node?.fill??1)!==1||node?.fx?.stroke?.enabled){material=document.createElement('canvas');material.width=vector.width;material.height=vector.height;material.getContext('2d').drawImage(vector,0,0);stylePixels(material,node?.fill??1,node?.fx?.stroke?{stroke:{...node.fx.stroke,width:node.fx.stroke.width*vector.width/unit.box.w}}:null)}const style=layerStyle({...layer,parentOpacity:current?.panel?1:layer.parentOpacity},current?.layerStyles?.[layer.id]||current?.layerStyles?.[layer.wordSourceId]);compositeDraw(g,t=>{t.save();clipPanelMask(t,node?.mask,target,screen);t.drawImage(material,target.x,target.y,target.w,target.h);t.restore()},style,target);continue}
+      if(vector){vectorWordsRendered++;let material=vector;if((node?.fill??1)!==1||node?.fx?.stroke?.enabled){material=document.createElement('canvas');material.width=vector.width;material.height=vector.height;material.getContext('2d').drawImage(vector,0,0);stylePixels(material,node?.fill??1,node?.fx?.stroke?{stroke:{...node.fx.stroke,width:node.fx.stroke.width*vector.width/unit.box.w}}:null)}const style=appearance({...layer,parentOpacity:current?.panel?1:layer.parentOpacity},current?.layerStyles?.[layer.id]||current?.layerStyles?.[layer.wordSourceId]);compositeDraw(g,t=>{t.save();clipPanelMask(t,node?.mask,target,screen);t.drawImage(material,target.x,target.y,target.w,target.h);t.restore()},style,target);continue}
 
-      const style=layerStyle({...layer,parentOpacity:current?.panel?1:layer.parentOpacity},current?.layerStyles?.[layer.id]||current?.layerStyles?.[layer.wordSourceId]),material=preparedLayerSource(layer,unit.box,node,art.PA);
+      const style=appearance({...layer,parentOpacity:current?.panel?1:layer.parentOpacity},current?.layerStyles?.[layer.id]||current?.layerStyles?.[layer.wordSourceId]),material=preparedLayerSource(layer,unit.box,node,art.PA);
       compositeDraw(g,t=>{t.save();clipPanelMask(t,node?.mask,target,screen);if(material)t.drawImage(material,target.x,target.y,target.w,target.h);else{t.translate(target.x,target.y);t.scale(target.w/unit.box.w,target.h/unit.box.h);t.translate(-unit.box.x,-unit.box.y);t.beginPath();t.rect(unit.box.x,unit.box.y,unit.box.w,unit.box.h);t.clip();drawSourceLayers(t,[layer],false,true);}t.restore()},style,target);
     }
   }
-  if(current?.panel)paintPanelTree(ctx,current.panel,screen,node=>targetFor(node.id),(g,node)=>paint(g,node.id,node));
+  function paint(g,id,node){if(omitBackground&&id==='__background')return;const base=targetFor(id),delta=current?.transforms?.[id];g.save();if(node?.mask?.enabled&&node.mask.kind==='path'&&!node.mask.linked&&node.mask.canvasRect)clipPanelMask(g,node.mask,base,screen);if(delta&&base?.w>0&&base?.h>0){const m=worldDelta(base,delta);g.transform(m.a,m.b,m.c,m.d,m.tx,m.ty)}try{paintPixels(g,id,node?.mask?.enabled&&node.mask.kind==='path'&&!node.mask.linked&&node.mask.canvasRect?{...node,mask:{...node.mask,enabled:false}}:node)}finally{g.restore()}}
+  if(capture)paint(ctx,capture.id,capture.node);
+  else if(current?.panel)paintPanelTree(ctx,current.panel,screen,node=>{const base=targetFor(node.id);return base?rectBounds(base,current?.transforms?.[node.id]):null},(g,node)=>paint(g,node.id,node));
   else for(const id of artworkStack(art,screen,current).slice().reverse())paint(ctx,id,null);
   return {layout,issues,vectorWordsRendered,PXMODE:'designer-calibrated '+screen.w+' × '+screen.h};
 }
+const cancelledPreviews=new WeakSet();
+export function cancelCalibrationPreview(canvas){cancelledPreviews.add(canvas)}
 export function renderCalibration(art,screen,maxW,maxH,proof){
   const scale=Math.min(maxW/screen.w,maxH/screen.h),c=document.createElement('canvas'),dpr=Math.min(window.devicePixelRatio||1,2);
   c.width=Math.max(1,Math.round(screen.w*scale*dpr));c.height=Math.max(1,Math.round(screen.h*scale*dpr));
   c.style.width='100%';c.style.height='100%';
   const ctx=c.getContext('2d');ctx.scale(c.width/screen.w,c.height/screen.h);
-  const result={c,...drawGuided(ctx,art,screen,proof),ready:prepareVectorLayout(art,screen,proof,c.width/screen.w,c.height/screen.h).then(()=>{ctx.clearRect(0,0,screen.w,screen.h);const rendered=drawGuided(ctx,art,screen,proof);c.dataset.vectorReady='true';c.dataset.vectorWords=String(rendered.vectorWordsRendered)})};
+  const result={c,...drawGuided(ctx,art,screen,proof),ready:prepareVectorLayout(art,screen,proof,c.width/screen.w,c.height/screen.h).then(()=>{if(cancelledPreviews.has(c))return;ctx.clearRect(0,0,screen.w,screen.h);const rendered=drawGuided(ctx,art,screen,proof);c.dataset.vectorReady='true';c.dataset.vectorWords=String(rendered.vectorWordsRendered)})};
   return result;
 }
 
@@ -488,10 +500,11 @@ export function artworkStack(art,screen,proof){
   return materialStackOrder([...layout.map(u=>u.id),...(art.originalBorder?['__border']:[]),...(bgInfo(art)&&art.a.source?.format!=='image'?['__background']:[])],proof?.layerOrder);
 }
 export function pickArtwork(art,screen,proof,x,y,pixelScale=1,pixelScaleY=pixelScale){
-  const layout=guideLayout(art,screen,proof),bg=bgInfo(art),b=borderGeometry(art,screen,layout,proof),px=x*screen.w,py=y*screen.h;
+  const layout=guideLayout(art,screen,proof),bg=bgInfo(art),b=borderGeometry(art,screen,layout,proof),input={x:x*screen.w,y:y*screen.h};
   for(const id of artworkStack(art,screen,proof)){
     const node=proof?.panel?.nodes.find(n=>n.id===id),target=layout.find(u=>u.id===id)?.frame || (id==='__border'&&b?{x:b.x/screen.w,y:b.y/screen.h,w:b.w/screen.w,h:b.h/screen.h}:{x:0,y:0,w:1,h:1});
-    if(node){if(node.opacity===0||ancestors(proof.panel,id).some(parent=>parent.opacity===0)||node.empty||node.type==='adjustment'||node.fill===0&&!node.fx?.stroke?.enabled)continue;if(node.mask?.enabled&&node.mask.kind==='path'){const r=node.mask.linked||!node.mask.canvasRect?{x:target.x+(node.mask.rect?.x||0)*target.w,y:target.y+(node.mask.rect?.y||0)*target.h,w:(node.mask.rect?.w??1)*target.w,h:(node.mask.rect?.h??1)*target.h}:node.mask.canvasRect;if(x<r.x||y<r.y||x>r.x+r.w||y>r.y+r.h)continue;}}
+    const baseRect=id==='__background'&&bg?backgroundFrame(bg.source,screen,proof?.backgroundTransform):{x:target.x*screen.w,y:target.y*screen.h,w:target.w*screen.w,h:target.h*screen.h},delta=proof?.transforms?.[id],mapped=delta?apply(inverse(worldDelta(baseRect,delta)),input):input,px=mapped.x,py=mapped.y,lx=px/screen.w,ly=py/screen.h;
+    if(node){if(node.opacity===0||ancestors(proof.panel,id).some(parent=>parent.opacity===0)||node.empty||node.type==='adjustment'||node.fill===0&&!node.fx?.stroke?.enabled)continue;if(node.mask?.enabled&&node.mask.kind==='path'){const r=node.mask.linked||!node.mask.canvasRect?{x:target.x+(node.mask.rect?.x||0)*target.w,y:target.y+(node.mask.rect?.y||0)*target.h,w:(node.mask.rect?.w??1)*target.w,h:(node.mask.rect?.h??1)*target.h}:node.mask.canvasRect;const mx=node.mask.linked||!node.mask.canvasRect?lx:x,my=node.mask.linked||!node.mask.canvasRect?ly:y;if(mx<r.x||my<r.y||mx>r.x+r.w||my>r.y+r.h)continue;}}
 
     if(id==='__background'){
       if(!bg || layerStyle(bg.L,proof?.layerStyles?.[id]).opacity===0)continue;const f=backgroundFrame(bg.source,screen,proof?.backgroundTransform),u=(px-f.x)/f.w,v=(py-f.y)/f.h;
@@ -505,12 +518,12 @@ export function pickArtwork(art,screen,proof,x,y,pixelScale=1,pixelScaleY=pixelS
     const unit=layout.find(u=>u.id===id);if(!unit)continue;
     if(unit.id==='flattened' && layerStyle(null,proof?.layerStyles?.flattened).opacity===0)continue;
     if(unit.layerIds.length && !allLayers(art).filter(l=>unit.layerIds.includes(l.id)).some(l=>layerStyle(l,proof?.layerStyles?.[l.id] || proof?.layerStyles?.[l.wordSourceId]).opacity>0))continue;
-    if(pickForeground([unit],x,y,(_unit,u,v)=>{
+    if(pickForeground([unit],lx,ly,(_unit,u,v)=>{
       if(unit.id==='flattened'){const source=art.GU?.units?.[id];return source?source.getContext('2d').getImageData(Math.min(source.width-1,Math.floor(u*source.width)),Math.min(source.height-1,Math.floor(v*source.height)),1,1).data[3]*layerStyle(null,proof?.layerStyles?.flattened).opacity:0;}
       const sx=unit.box.x+u*unit.box.w,sy=unit.box.y+v*unit.box.h;
       let alpha=0;
       for(const layer of allLayers(art).filter(l=>unit.layerIds.includes(l.id))){
-        const vector=layer.vectorWord&&art.VR?.get(vectorRasterKey(layer,unit.box,unit.frame.w*screen.w*pixelScale,unit.frame.h*screen.h*pixelScaleY));if(vector){const opacity=layerStyle(layer,proof?.layerStyles?.[layer.id]||proof?.layerStyles?.[layer.wordSourceId]).opacity;alpha=Math.max(alpha,vector.getContext('2d').getImageData(Math.min(vector.width-1,Math.floor(u*vector.width)),Math.min(vector.height-1,Math.floor(v*vector.height)),1,1).data[3]*opacity);continue}
+        const transform=multiply({a:pixelScale,b:0,c:0,d:pixelScaleY,tx:0,ty:0},multiply(frameMatrix(unit.frame,screen),delta||IDENTITY)),vector=layer.vectorWord&&art.VR?.get(vectorRasterKey(layer,unit.box,Math.hypot(transform.a,transform.b),Math.hypot(transform.c,transform.d)));if(vector){const opacity=layerStyle(layer,proof?.layerStyles?.[layer.id]||proof?.layerStyles?.[layer.wordSourceId]).opacity;alpha=Math.max(alpha,vector.getContext('2d').getImageData(Math.min(vector.width-1,Math.floor(u*vector.width)),Math.min(vector.height-1,Math.floor(v*vector.height)),1,1).data[3]*opacity);continue}
         const [lx,ly,lw,lh]=layer.sourceBox || layer.box,c=layer.crop;
         if(c&&(sx<c.x||sy<c.y||sx>=c.x+c.w||sy>=c.y+c.h))continue;
         const px=Math.floor((sx-lx)/lw*layer.px.width),py=Math.floor((sy-ly)/lh*layer.px.height);
@@ -522,4 +535,12 @@ export function pickArtwork(art,screen,proof,x,y,pixelScale=1,pixelScaleY=pixelS
     }))return {type:'foreground',id};
   }
   return null;
+}
+
+export function drawCalibrationInto(canvas,art,screen,proof){const g=canvas.getContext('2d');g.save();g.resetTransform();g.clearRect(0,0,canvas.width,canvas.height);g.scale(canvas.width/screen.w,canvas.height/screen.h);try{return drawGuided(g,art,screen,proof)}finally{g.restore()}}
+
+/** Isolated export pixels omit blend and opacity; PSD stores those natively. */
+export function renderLayerPixels(art,screen,proof,id,node,sourceId){
+ const canvas=document.createElement("canvas");canvas.width=screen.w;canvas.height=screen.h;
+ drawGuided(canvas.getContext("2d"),art,screen,proof,{id,node,sourceId});return canvas;
 }

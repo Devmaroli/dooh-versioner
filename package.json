@@ -1,14 +1,17 @@
 {
   "name": "dooh-versioner",
   "private": true,
-  "version": "1.5.0",
+  "version": "1.6.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
     "build": "vite build",
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
-    "test:browser": "playwright test"
+    "typecheck:transform": "tsc -p tsconfig.free-transform.json",
+    "test:browser": "playwright test",
+    "build:extension": "node scripts/build-extension.mjs",
+    "test:extension": "playwright test --config playwright.extension.config.ts"
   },
   "dependencies": {
     "ag-psd": "34.1.0",
@@ -25,6 +28,7 @@
     "fake-indexeddb": "^6.2.7",
     "typescript": "^5.8.2",
     "vite": "^6.2.2",
-    "vitest": "^3.0.9"
-  }
+    "vitest": "^5.0.5"
+  },
+  "author": "Kapildev Maroli"
 }

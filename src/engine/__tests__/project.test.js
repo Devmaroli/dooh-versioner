@@ -15,11 +15,11 @@ test('missing languages never create export rows', () => {
   expect(availableRows([{ lang: '' }], rows)).toEqual([])
   expect(availableRows([], rows)).toEqual([])
 })
-test('visiting a stage cannot complete it or enable the unimplemented editor', () => {
+test('visiting a stage cannot complete it; refinement requires manual review', () => {
   expect(workflowStatus('analyse', [], 6)).toBe('Not ready')
   expect(workflowStatus('import', [{ lang: '' }], 6)).toBe('Needs attention')
   expect(workflowStatus('import', [{ lang: 'AR' }], 6)).toBe('Complete')
-  expect(workflowStatus('refine', [{ lang: 'AR' }], 6)).toBe('Not implemented')
+  expect(workflowStatus('refine', [{ lang: 'AR' }], 6)).toBe('Manual review required')
   expect(workflowStatus('export', [{ lang: 'AR' }], 0)).toBe('Not ready')
   expect(workflowStatus('export', [{ lang: 'AR' }], 1)).toBe('Manual review required')
 })
