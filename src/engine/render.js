@@ -121,6 +121,25 @@ function unitCanvas(m,role){m.U=m.U||{};if(m.U[role]!==undefined)return m.U[role
   const c=document.createElement("canvas");c.width=Math.max(1,x1-x0);c.height=Math.max(1,y1-y0);const g=c.getContext("2d");const order=flatL(m.a.layers);
   ls.slice().sort((p,q)=>order.indexOf(q)-order.indexOf(p)).forEach(l=>{g.save();if(l.opacity!=null)g.globalAlpha=l.opacity;if(l.blend==="multiply")g.globalCompositeOperation="multiply";g.drawImage(l.px,l.box[0]-x0,l.box[1]-y0);g.restore();}); // bottom→top
   return m.U[role]={c,box:[x0,y0,x1-x0,y1-y0]};}
+/** Use the original composite's neutral edge material when a flat PSD layer
+ * is a decorative accent rather than the actual canvas background. */
+function originalEdgeColor(m){
+  const src=m.a.composite;if(!src)return null;
+  const c=document.createElement('canvas');c.width=32;c.height=32;
+  const g=c.getContext('2d');g.drawImage(src,0,0,32,32);
+  const d=g.getImageData(0,0,32,32).data,colors=[];
+  for(let y=0;y<32;y++)for(let x=0;x<32;x++){
+    if(x>3&&x<28&&y>3&&y<28)continue;
+    const i=(y*32+x)*4;if(d[i+3]<200)continue;
+    const r=d[i],gr=d[i+1],b=d[i+2];
+    // Ignore saturated brand accents and dark copy when extending canvas.
+    if(Math.max(r,gr,b)-Math.min(r,gr,b)>55||Math.max(r,gr,b)<105)continue;
+    colors.push([r,gr,b]);
+  }
+  if(colors.length<24)return null;
+  const med=k=>colors.map(c=>c[k]).sort((a,b)=>a-b)[colors.length>>1];
+  return [med(0),med(1),med(2)];
+}
 function bgInfo(m){if(m.BG!==undefined)return m.BG;const L=roleLayers(m,"bg")[0];if(!L)return m.BG=null;const q=document.createElement("canvas");q.width=32;q.height=18;const g=q.getContext("2d");g.drawImage(L.px,0,0,32,18);
   const d=g.getImageData(0,0,32,18).data;let r=0,gg=0,b=0,v=0;const n=d.length/4;for(let i=0;i<d.length;i+=4){r+=d[i];gg+=d[i+1];b+=d[i+2];}r/=n;gg/=n;b/=n;for(let i=0;i<d.length;i+=4)v+=(d[i]-r)**2+(d[i+1]-gg)**2+(d[i+2]-b)**2;
   return m.BG={L,flat:Math.sqrt(v/n)<6,color:`rgb(${r|0},${gg|0},${b|0})`,lum:(.2126*r+.7152*gg+.0722*b)/255};}
@@ -179,7 +198,7 @@ function drawPx(ctx,row,s,P){const tw=s.w,th=s.h,m=ART,bi=bgInfo(m);CPX=[];
     return P;
   }
   if(Math.abs(Math.log((tw/th)/(m.a.w/m.a.h)))<=0.02&&m.a.composite&&!(s.faces&&s.faces.length>1)){ctx.drawImage(m.a.composite,0,0,tw,th);P.PXMODE="master as-is (same ratio, scaled)";const hu3=unitCanvas(m,"headline");P.PXR={};if(hu3){const f=tw/m.a.w;P.PXR.hlMask=[hu3.c,{x:hu3.box[0]*f,y:hu3.box[1]*f,w:hu3.c.width*f,h:hu3.c.height*f,q:f}];}P.PXC=pxContrast(ctx,m,P);P.PXQ={hlPx:Math.round((hu3?hu3.box[3]:0)*th/m.a.h),hlPct:+((hu3?hu3.box[3]:0)/m.a.h*100).toFixed(1),overlapPx:0,outside:false,mode:P.PXMODE};return P;}
-  if(bi){if(bi.flat){ctx.fillStyle=bi.color;ctx.fillRect(0,0,tw,th);}else{const L=bi.L,f=Math.max(tw/L.px.width,th/L.px.height);const w=tw/f,h=th/f,fo=(m.an.rules.find(r=>r.key==="focal")||{}).value||[.5,.5];
+  if(bi){if(bi.flat){const edge=originalEdgeColor(m);ctx.fillStyle=edge?`rgb(${edge.join(',')})`:bi.color;ctx.fillRect(0,0,tw,th);}else{const L=bi.L,f=Math.max(tw/L.px.width,th/L.px.height);const w=tw/f,h=th/f,fo=(m.an.rules.find(r=>r.key==="focal")||{}).value||[.5,.5];
     const x=Math.max(0,Math.min(L.px.width-w,fo[0]*L.px.width-w/2)),y=Math.max(0,Math.min(L.px.height-h,fo[1]*L.px.height-h/2));ctx.drawImage(L.px,x,y,w,h,0,0,tw,th);}}
   else{ctx.fillStyle="#333";ctx.fillRect(0,0,tw,th);}
   const rectOf=kind=>{const i=P.ml.findIndex(x=>x.L.kind===kind);return i>=0?P.RECTS[i]:null;};
@@ -291,9 +310,31 @@ function bakeFx(src,fx){const px=v=>v==null?0:typeof v==="number"?v:+v.value||0,
   g.drawImage(src,pad,pad);return {c,pad};}
 
 
+/** Prefer the visually dominant campaign line over date/offer copy. */
+function correctHeadlineRole(a,an){
+  const flat=flatL(a.layers), candidates=flat.filter(l=>l.kind==='text'&&!l.hidden&&l.box&&l.box[2]>0&&l.box[3]>0);
+  if(!candidates.length)return;
+  const score=l=>{
+    const name=(l.name||'').toLowerCase(),content=String(l.text||l.value||'').toLowerCase();
+    const t=name+' '+content,b=l.box;
+    let v=Math.sqrt(b[2]*b[3])/Math.sqrt(a.w*a.h);
+    if(/headline|hero|main copy|main text|tagline|we still want|more kitchens/.test(t))v+=2;
+    if(/offer|extended|november|date|terms|legal|whatsapp|phone|contact|cta/.test(t))v-=2;
+    return v;
+  };
+  const sorted=candidates.slice().sort((x,y)=>score(y)-score(x)),best=sorted[0];
+  if(score(best)<=0)return;
+  const current=an.roles.find(x=>x.role==='headline');
+  if(current&&current.id===best.id)return;
+  const chosen=an.roles.find(x=>x.id===best.id);
+  if(!chosen)return;
+  if(current)current.role=/offer|extended|november|date/i.test((flat.find(l=>l.id===current.id)||{}).name||'')?'offer':'ignore';
+  chosen.role='headline';chosen.why='campaign headline: visual size and semantic priority';chosen.confidence=.8;
+}
 function artLoad(a, thumb) {
   const fonts = [...new Set(JSON.stringify(a.layers).match(/"font":"[^"]+"/g) || [])].map((x) => x.slice(8, -1))
   const an = Adapt.analyseArtwork(a, fonts.filter(fontOK).concat(['__none__']))
+  correctHeadlineRole(a, an)
   pxFixStyle(a, an)
   const lr = an.rules.find((r) => r.key === 'lang')
   const fileLang = Adapt.langFromFilename((a.source && a.source.file) || '')
