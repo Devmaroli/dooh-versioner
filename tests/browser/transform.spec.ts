@@ -26,7 +26,7 @@ test('scale handles and numerical width keep the selected anchor fixed and retai
   await page.getByRole('button', { name: 'Move V', exact: true }).click()
   await expect(handle).toBeVisible()
   await page.keyboard.press('s'); await expect(handle).toBeVisible()
-  await page.getByRole('button', { name: 'Back to five previews', exact: false }).click()
+  await page.getByRole('button', { name: 'Back to layout previews', exact: false }).click()
   await expect(page.getByText('Saved on this device')).toBeVisible()
   await page.reload(); await page.getByRole('button', { name: /3 · Adapt/ }).click()
   await page.getByRole('button', { name: 'Edit 2.6 Screen', exact: true }).click()

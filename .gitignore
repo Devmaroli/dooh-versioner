@@ -6,3 +6,6 @@ dist
 work/
 playwright-report/
 test-results/
+
+dist-extension/
+artifacts/

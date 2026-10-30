@@ -60,7 +60,7 @@ export async function exportLayeredPsd(art, screen, composite) {
     return result
   }
   const adapted = await children(null)
-  const source = art.a.psdBuffer ? readPsd(new Uint8Array(art.a.psdBuffer), { skipThumbnail: true, skipCompositeImageData: true, useImageData: true }) : null
+  const source = art.a.psdBuffer ? readPsd(new Uint8Array(art.a.psdBuffer), { skipThumbnail: true, skipCompositeImageData: true, useImageData: true, totalMemoryLimit: 256 * 1024 * 1024 }) : null
   const original = source?.children || [{ name: art.name, canvas: art.a.composite, left: 0, top: 0 }]
   const document = { width: screen.w, height: screen.h, canvas: composite, linkedFiles: source?.linkedFiles, patterns: source?.patterns,
     children: [{ name: 'Original source — native layers, original coordinates (hidden)', hidden: true, blendMode: 'pass through', children: original }, ...adapted] }

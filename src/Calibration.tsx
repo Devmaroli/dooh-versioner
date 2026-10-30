@@ -6,7 +6,7 @@ import { verifyEmbeddedVector } from './embeddedVectors.js'
 import { useEffect, useRef, useState } from 'react'
 import { SCREENS } from './data/presets.js'
 import { renderCalibration, drawCalibrationInto, cancelCalibrationPreview, pickArtwork, backgroundBounds } from './engine/render.js'
-import { screenProofKey, createScreenProof, FAMILIES, GUIDE_PRESETS, contentUnits, guideLayout, guideFindings, initialProof, layoutFamily, sourceSignature } from './layoutGuides.js'
+import { screenProofKey, createScreenProof, requiredFamilies, GUIDE_PRESETS, contentUnits, guideLayout, guideFindings, initialProof, layoutFamily, sourceSignature } from './layoutGuides.js'
 import { arrangeFrames } from './words.js'
 import { allLayers, drawSourceLayers, unionBounds } from './artwork.js'
 import { editorSnapshot, editorHistory, commitEditorAction, finishEditorAction, travelEditorHistory, restoreEditorSnapshot } from './editorHistory.js'
@@ -45,7 +45,7 @@ function LayerThumbnail({ layers, large = false }: any) {
   return <canvas ref={canvas} width={large ? 600 : 100} height={large ? 600 : 100} aria-hidden="true" />
 }
 
-export function Calibration({ art, onChange, onBatch, targetScreen, onClose }: any) {
+export function Calibration({ art, onChange, onBatch, targetScreen, onClose, targetScreens }: any) {
   const [headlineSourceId, setHeadlineSourceId] = useState('')
   const [preparing,setPreparing]=useState(false)
   const currentArt=useRef<any>(art);currentArt.current=art
@@ -70,11 +70,12 @@ export function Calibration({ art, onChange, onBatch, targetScreen, onClose }: a
   const canvasHost = useRef<HTMLDivElement>(null)
   const outputMode=!!targetScreen, storeName=outputMode?'outputs':'proofs', proofKey=(s:any)=>outputMode?screenProofKey(s):layoutFamily(s)
   const screen = (outputMode?SCREENS:PRESETS).find(s => s.name === active)
+  const families = requiredFamilies(targetScreens), presets = PRESETS.filter(s=>families.includes(layoutFamily(s)))
   const signature = sourceSignature(art)
   const getProof = (s: any) => art.calibration?.[storeName]?.[proofKey(s)] || (outputMode?createScreenProof(art,s):initialProof(art,s))
   const closeEditor=()=>{setActive(null);onClose?.()}
   useEffect(()=>{if(targetScreen)open(targetScreen)},[targetScreen?.name])
-  const approvedCount = FAMILIES.filter(f => art.calibration?.proofs?.[f]?.approved && art.calibration.proofs[f].sourceSignature === signature).length
+  const approvedCount = families.filter(f => art.calibration?.proofs?.[f]?.approved && art.calibration.proofs[f].sourceSignature === signature).length
   const proof = screen ? getProof(screen) : null
   const layout = screen ? guideLayout(art, screen, proof) : []
   const panel = screen ? panelForArtwork(art, layout, proof) : { version: 1 as const, nodes: [] }
@@ -344,7 +345,7 @@ export function Calibration({ art, onChange, onBatch, targetScreen, onClose }: a
   }
   function applyGuides() {
     beginAction('Enable batch guides')
-    if (approvedCount !== FAMILIES.length) return
+    if (!families.length || approvedCount !== families.length) return
     art.calibration = { ...art.calibration, enabled: true }; changed(); onBatch()
   }
   function trapKeys(event: React.KeyboardEvent) {
@@ -366,9 +367,9 @@ export function Calibration({ art, onChange, onBatch, targetScreen, onClose }: a
     if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last?.focus() }
     if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first?.focus() }
   }
-  return <section className={outputMode?'output-refinement':'calibration'} aria-label={outputMode?'Adaptation refinement':'Five calibration previews'}>
-    {!outputMode&&<><div className="calibration-heading"><div><h2>Calibrate five layouts first</h2><p>Double-click a preview to edit it full screen. Linked layers move together. Approve each guide before batch adaptation.</p></div><span>{approvedCount} / {FAMILIES.length} guides approved</span></div>
-    <div className="calibration-gallery">{PRESETS.map(s => {
+  return <section className={outputMode?'output-refinement':'calibration'} aria-label={outputMode?'Adaptation refinement':'Layout calibration previews'}>
+    {!outputMode&&<><div className="calibration-heading"><div><h2>Calibrate layouts for selected screens</h2><p>Double-click a preview to edit it full screen. Linked layers move together. Approve each guide before batch adaptation.</p></div><span>{approvedCount} / {families.length} guides approved</span></div>
+    <div className="calibration-gallery">{presets.map(s => {
       const p = getProof(s), approved = p.approved && p.sourceSignature === signature
       return <article className="calibration-card" key={s.name}>
         <div className="calibration-thumbnail" onDoubleClick={() => open(s)} title="Double-click to edit this layout"><div style={{ aspectRatio: `${s.w}/${s.h}`, height: '100%', maxWidth: '100%' }}><ProofCanvas art={art} screen={s} proof={p} /></div></div>
@@ -376,9 +377,9 @@ export function Calibration({ art, onChange, onBatch, targetScreen, onClose }: a
         <button type="button" className="ghost" onClick={() => open(s)}>Edit {s.name}</button>
       </article>
     })}</div>
-    <div className="calibration-batch"><p>Guides belong to this master. Source, visibility, links, tags or edge changes require guide review again.</p><button type="button" disabled={approvedCount !== FAMILIES.length} onClick={applyGuides}>Use these guides for full adaptation</button></div></>}
+    <div className="calibration-batch"><p>Guides belong to this master. Source, visibility, links, tags or edge changes require guide review again.</p><button type="button" disabled={!families.length || approvedCount !== families.length} onClick={applyGuides}>Use these guides for full adaptation</button></div></>}
     {active && screen && <div className="calibration-focus" ref={dialog} role="dialog" aria-modal="true" aria-label={`Edit ${screen.name}`} onKeyDown={trapKeys} onFocusCapture={e => { if (e.target instanceof HTMLInputElement) historyGesture.current = { recorded: false } }} onBlurCapture={e => { if (e.target instanceof HTMLInputElement) historyGesture.current = null }}>
-      <header><button type="button" className="ghost" onClick={closeEditor}>{outputMode?'← Back to adaptations':'← Back to five previews'}</button><strong>{screen.name} · {screen.w} × {screen.h}{outputMode?` · ${art.lang}`:''}</strong><button type="button" className="ghost" disabled={!canTravel('undo')} onClick={() => travel('undo')}>Undo</button><button type="button" className="ghost" disabled={!canTravel('redo')} onClick={() => travel('redo')}>Redo</button><span className="spacer" /><label>Zoom<select aria-label="Calibration zoom" value={zoom} onChange={e => setZoom(Number(e.target.value))}>{![.25,.5,1,2,3].includes(zoom)&&<option value={zoom}>{Math.round(zoom*100)}%</option>}<option value={.25}>25%</option><option value={.5}>50%</option><option value={1}>Fit</option><option value={2}>200%</option><option value={3}>300%</option></select></label><button type="button" className="ghost" disabled={!selectedTargets.length} onClick={()=>fitTargets(panelSelected)}>Fit selection</button><button type="button" disabled={issues.some(i => i.blocked)} onClick={approve}>{proof.approved && proof.sourceSignature === signature ? (outputMode?'Adaptation approved':'Guide approved') : (outputMode?'Approve this adaptation':'Approve this guide')}</button></header>
+      <header><button type="button" className="ghost" onClick={closeEditor}>{outputMode?'← Back to adaptations':'← Back to layout previews'}</button><strong>{screen.name} · {screen.w} × {screen.h}{outputMode?` · ${art.lang}`:''}</strong><button type="button" className="ghost" disabled={!canTravel('undo')} onClick={() => travel('undo')}>Undo</button><button type="button" className="ghost" disabled={!canTravel('redo')} onClick={() => travel('redo')}>Redo</button><span className="spacer" /><label>Zoom<select aria-label="Calibration zoom" value={zoom} onChange={e => setZoom(Number(e.target.value))}>{![.25,.5,1,2,3].includes(zoom)&&<option value={zoom}>{Math.round(zoom*100)}%</option>}<option value={.25}>25%</option><option value={.5}>50%</option><option value={1}>Fit</option><option value={2}>200%</option><option value={3}>300%</option></select></label><button type="button" className="ghost" disabled={!selectedTargets.length} onClick={()=>fitTargets(panelSelected)}>Fit selection</button><button type="button" disabled={issues.some(i => i.blocked)} onClick={approve}>{proof.approved && proof.sourceSignature === signature ? (outputMode?'Adaptation approved':'Guide approved') : (outputMode?'Approve this adaptation':'Approve this guide')}</button></header>
       <div className="calibration-edit-layout" style={{'--inspector-width': `${art.previewSettings?.layerThumbnailSize === 300 ? 440 : art.previewSettings?.layerThumbnailSize === 200 ? 380 : 340}px`} as React.CSSProperties}><div className="calibration-stage-area"><canvas ref={gizmoCanvas} className="free-transform-gizmo" aria-hidden="true"/><div className="editor-toolbox" role="toolbar" aria-label="Editing tools"><button type="button" aria-pressed={tool === 'move'} onClick={() => setTool('move')}>Move <kbd>V</kbd></button><button type="button" aria-pressed={tool === 'scale'} onClick={() => {setTool('scale');fitTargets(panelSelected)}}>Scale <kbd>S</kbd></button><span>{tool === 'scale' ? 'Drag a handle to scale around the chosen anchor' : 'Inside box: move · Edge handles: scale'}</span></div><div className="calibration-stage"><div className="calibration-canvas-frame" ref={canvasHost} onPointerDown={event=>{
           if(event.button!==0||((event.target as HTMLElement).closest('[data-transform-handle]')&&!event.ctrlKey&&!event.metaKey))return
           const gizmoHit=freeTransform.hitPointer(event.nativeEvent)

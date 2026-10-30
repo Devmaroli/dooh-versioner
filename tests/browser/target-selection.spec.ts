@@ -1,0 +1,35 @@
+import { test, expect } from '@playwright/test'
+import { unzipSync } from 'fflate'
+import fs from 'node:fs'
+
+test('upload selection warns about omitted screens and adapts/exports only available targets and languages', async ({ page }) => {
+  await page.goto('/'); await expect(page.getByText('Saved on this device')).toBeVisible()
+  await page.locator('input[type=file]').setInputFiles({ name: 'single_EN.png', mimeType: 'image/png', buffer: Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Y9Zl1sAAAAASUVORK5CYII=', 'base64') })
+  await page.getByText(/Choose target screens ·/).click()
+  while (await page.locator('.screens input:checked').count()) await page.locator('.screens input:checked').first().uncheck()
+  await expect(page.getByRole('button', { name: /Go ahead and adapt/ })).toBeDisabled()
+  await page.locator('.screens label').filter({ hasText: 'Alshaheed - Mupi 1080×1920' }).getByRole('checkbox').check()
+  await expect(page.getByText(/Selection notice: 1 of \d+ screens selected/)).toBeVisible()
+  await page.getByText('Check selected sizes (1)').click(); await expect(page.locator('.selection-notice li')).toHaveText('Alshaheed - Mupi · 1080 × 1920')
+  await page.getByRole('button', { name: /Go ahead and adapt/ }).click(); await expect(page.locator('.calibration-card')).toHaveCount(1)
+  await page.getByRole('button', { name: 'Edit Alshaheed - Mupi', exact: true }).click(); await page.getByRole('button', { name: 'Approve this guide', exact: true }).click()
+  await page.getByRole('button', { name: 'Back to layout previews', exact: false }).click()
+  await page.getByRole('button', { name: 'Use these guides for full adaptation', exact: true }).click()
+  await expect(page.locator('.adaptation-tile')).toHaveCount(1)
+  await page.getByRole('button', { name: /6 · Export/ }).click()
+  page.once('dialog', d => d.accept()); const downloading = page.waitForEvent('download'); await page.getByRole('button', { name: 'Export review ZIP', exact: true }).click()
+  const zip = unzipSync(fs.readFileSync((await (await downloading).path())!)); expect(Object.keys(zip)).toEqual(['EN_Alshaheed_-_Mupi_1080x1920.png'])
+  await page.getByLabel('Transparent background', { exact: true }).check()
+  page.once('dialog', d => d.accept()); await page.getByRole('button', { name: 'Export review ZIP', exact: true }).click()
+  await expect(page.getByText('Transparent background export requires a separate background layer. This master is flattened.', { exact: true })).toBeVisible()
+  await page.getByLabel('Transparent background', { exact: true }).uncheck()
+  // Expanding scope requires the additional family, while preserving the existing one.
+  await page.locator('.screens label').filter({ hasText: 'Al Salam Mall 7680×1152' }).getByRole('checkbox').check()
+  await expect(page.getByRole('button', { name: 'Export review ZIP', exact: true })).toBeDisabled()
+  await expect(page.getByText('Approve the layout guide for this screen in Adapt.')).toBeVisible()
+  await page.getByRole('button', { name: /3 · Adapt/ }).click(); await expect(page.locator('.calibration-card')).toHaveCount(2)
+  await expect(page.locator('.calibration-card').filter({ hasText: 'Alshaheed - Mupi' }).getByText('Guide approved')).toBeVisible()
+  await page.screenshot({ path: 'work/target-selection-warning.png' })
+  await page.getByRole('button', { name: /1 · Import/ }).click(); await expect(page.getByText('Saved on this device')).toBeVisible(); await page.reload()
+  await expect(page.getByText(/Selection notice: 2 of \d+ screens selected/)).toBeVisible()
+})

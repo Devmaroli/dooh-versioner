@@ -38,7 +38,7 @@ test('editor detects the IKEA source border, splits five words and renders the r
   const bgRow = page.locator('.editor-layer-row:not([aria-expanded])').first(), target = page.locator('.editor-layer-row:not([aria-expanded])').nth(2)
   await bgRow.dragTo(target)
   await expect(page.locator('.editor-layer-row:not([aria-expanded])').first()).not.toContainText('Newspaper 03')
-  await page.getByRole('button', { name: 'Back to five previews', exact: false }).click()
+  await page.getByRole('button', { name: 'Back to layout previews', exact: false }).click()
   await expect(page.getByText('Saved on this device')).toBeVisible()
   await page.reload(); await page.getByRole('button', { name: /3 · Adapt/ }).click()
   await page.getByRole('button', { name: 'Edit Alshaheed - Mupi', exact: true }).click()

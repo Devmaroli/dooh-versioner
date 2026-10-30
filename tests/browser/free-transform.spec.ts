@@ -27,7 +27,7 @@ test('native gizmo pins corners, stretches on Shift, rotates, cancels and coales
   await page.mouse.move(centre.x+40,centre.y+10);await page.mouse.up();await expect.poll(async()=>Number(await x.inputValue())).toBeGreaterThan(Number(savedX))
   await handle(page,'Undo').click();await expect(x).toHaveValue(savedX);await handle(page,'Redo').click();await expect.poll(async()=>Number(await x.inputValue())).toBeGreaterThan(Number(savedX))
   await page.getByRole('heading',{name:'Layers',exact:true}).scrollIntoViewIfNeeded();await page.screenshot({path:'work/free-transform-gizmo.png'})
-  await handle(page,'Back to five previews').click();await expect(page.getByText('Saved on this device')).toBeVisible();await page.reload();await page.getByRole('button',{name:/3 · Adapt/}).click();await handle(page,'Edit Alshaheed - Mupi').click();await expect(angle).toHaveValue('90');expect(errors).toEqual([])
+  await handle(page,'Back to layout previews').click();await expect(page.getByText('Saved on this device')).toBeVisible();await page.reload();await page.getByRole('button',{name:/3 · Adapt/}).click();await handle(page,'Edit Alshaheed - Mupi').click();await expect(angle).toHaveValue('90');expect(errors).toEqual([])
 })
 function pixels(rgb:number[],w:number,h:number){const data=new Uint8ClampedArray(w*h*4);for(let i=0;i<data.length;i+=4)data.set([...rgb,255],i);return {width:w,height:h,data}}
 test('protected logos stay proportional; rotated screen edits are picked and exported at the same geometry',async({page})=>{

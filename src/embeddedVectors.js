@@ -23,7 +23,7 @@ async function vectorDocument(layer) {
   if(!documents.has(source))documents.set(source,(async()=>{
     const t=source.transform
     if(t&&(Math.abs(t[1]-t[3])>.01||Math.abs(t[0]-t[6])>.01||t[2]<=t[0]||t[5]<=t[1]))throw new Error('This smart object has a rotated, mirrored or warped placement. Vector word mapping needs review.')
-    const pdf=await pdfLibrary(),task=pdf.getDocument({data:source.data.slice(),isEvalSupported:false,useSystemFonts:false})
+    const pdf=await pdfLibrary(),task=pdf.getDocument({data:source.data.slice(),isEvalSupported:false,useSystemFonts:false,useWorkerFetch:false,useWasm:false,maxImageSize:40000000,canvasMaxAreaInBytes:160000000})
     try {
       const pdfDoc=await task.promise,page=await pdfDoc.getPage(source.page||1),base=page.getViewport({scale:1}),viewport=page.getViewport({scale:Math.min(1,1600/Math.max(base.width,base.height))})
       const c=document.createElement('canvas');c.width=Math.ceil(viewport.width);c.height=Math.ceil(viewport.height)

@@ -1,10 +1,12 @@
-# DOOH Versioner
+# DOOH Creative Studio
 
-Local Bannerflow-style tool for DOOH ad versioning and auto-resize. One master design is adapted to booked M2R screen sizes and to many versions, including English and Arabic (RTL). This repository is prototype **v1.5**: the static UI, the layout engine, agent skills, and the problem pack.
+Version **1.6.0** provides the React six-stage workflow, source-layer analysis, selected-target layout guides, per-screen refinement with affine transforms, and lossless PNG/PDF or layered PSD export. The local Chrome extension uses the same editor without a server. Legacy prototype files remain for reference.
+
+See [Chrome installation and IT handoff](docs/chrome-extension.md), [security review](docs/security-audit.md), [export formats and PSD limitations](docs/export-formats.md), [selected targets](docs/selected-targets.md), and [Free Transform](docs/free-transform.md).
 
 This is a **private** repository. `samples/real/` and `shots/client-rio` are confidential client artwork (Bolton Group, Rio). The same Rio captures also sit at the repo root as `shots/real-*.png` and `shots/mock-tag-*.png`. Keep them here; do not publish them.
 
-The static prototype is deployed at [https://dooh-versioner-proto.vercel.app](https://dooh-versioner-proto.vercel.app). `proto/` is unchanged. The Vite app uses that same v1.5 renderer.
+The static prototype is deployed at [https://dooh-versioner-proto.vercel.app](https://dooh-versioner-proto.vercel.app). `proto/` is unchanged. The React app evolves that renderer with source-aware guides, editing and validation.
 
 ## App
 
@@ -15,7 +17,7 @@ npm test         # engine/tests under Vitest
 npm run build    # production bundle in dist/
 ```
 
-Upload PNG, JPG, SVG, or PSD masters (language from the filename suffix). Tick screens, review the EN/AR grid, click a tile to enlarge, then export a PNG zip. With no upload, tiles use the prototype's built-in template. Sample SVG and sample PSD buttons load the placeholder artwork already in `src/engine/presets.js` (not client Rio files).
+Import PSD/PSB, SVG or raster masters, confirm their language and semantic roles, then choose the required screen presets. Approve the selected layout guides and double-click generated tiles to refine each output. Export selected available languages as PNG, PDF or layered PSD ZIP files. Sample SVG and sample PSD buttons load the placeholder artwork already in `src/engine/presets.js` (not client Rio files).
 
 | Path | What it is |
 |---|---|

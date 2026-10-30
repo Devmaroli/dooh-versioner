@@ -47,11 +47,11 @@ test('lossless PNG/PDF and layered PSD preserve resolution, transparency, native
   await page.getByRole('button', { name: /3 · Adapt/ }).click(); await page.getByRole('button', { name: 'Edit Alshaheed - Mupi', exact: true }).click()
   await page.getByRole('button', { name: 'Select layer Top headline', exact: true }).click()
   for (const [label, value] of [['Width (%)', '50'], ['X position (%)', '10'], ['Y position (%)', '10']]) await page.getByLabel(label, { exact: true }).fill(value)
-  await page.getByRole('button', { name: 'Back to five previews', exact: false }).click(); await approveGuides(page)
+  await page.getByRole('button', { name: 'Back to layout previews', exact: false }).click(); await approveGuides(page)
+  await page.getByRole('button', { name: /6 · Export/ }).click()
   // Export one real preset, never a test-only dimension.
   while (await page.locator('.screens input[type=checkbox]:checked').count()) await page.locator('.screens input[type=checkbox]:checked').first().uncheck()
   await page.locator('.screens label').filter({ hasText: 'Alshaheed - Mupi 1080×1920' }).getByRole('checkbox').check()
-  await page.getByRole('button', { name: /6 · Export/ }).click()
   const png = await download(page, 'png'), reference = await pngPixels(page, png)
   expect(reference).toEqual({ w: 1080, h: 1920, outside: [80, 120, 160, 255], inside: [135, 141, 167, 255] })
   const bytes = await download(page, 'psd'), decoded = readPsd(bytes, { useImageData: true }), original = decoded.children![0]

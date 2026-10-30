@@ -76,3 +76,8 @@ Native Canvas handles reuse the existing selection colour. Transparent focusable
 
 ## Export formats — 2026-10-31
 Format and alpha controls sit in the Export stage, keeping the workflow header clear. Native selects share existing dark surfaces and focus rings. Format limitations are visible alongside the export action. Lossless output and transparent PNG were checked in Chrome; user visual review remains pending.
+
+## Target subset and extension — 2026-10-31
+A restrained amber selection notice identifies omitted sizes with explicit text, count and expandable details. Target choices use the existing screen list and exact presets. The extension launcher uses the locked dark palette, a single Open Studio action and visible v1.6.0. Author attribution stays in source comments. Three native SVG icon directions include actual 16/24/32px and monochrome proofs. User icon selection is pending. Self-critique: visual 4, purpose 5, hierarchy 5, specificity 4, restraint 5, variety 4.
+
+The user selected the original Adapt direction (overlapping portrait and landscape frames). It is installed as the extension icon with the requested thinner 7px strokes. The three A refinements remain in design/ as exploration assets.

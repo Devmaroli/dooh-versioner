@@ -53,7 +53,7 @@ const AI={W:160,H:90,sal:null};(function(){const s=document.createElement("canva
  for(let y=1;y<AI.H-1;y++)for(let x=1;x<AI.W-1;x++){const i=y*AI.W+x,bl=.299*b[i*4]+.587*b[i*4+1]+.114*b[i*4+2];
   AI.sal[i]=Math.pow(Math.abs(L[i]-bl)+.5*(Math.abs(L[i+1]-L[i-1])+Math.abs(L[i+AI.W]-L[i-AI.W]))+(L[i]>200?40:0),1.5);}})();
 // ---- non-destructive state: master (const) → rules (computed) → AI decisions (status) → manual overrides (params) ----
-const CFG={gap:Adapt.DEFAULT_PRODUCT_GAP,thr:.8},P_ROUTE={};function renderRQ(){const q=Object.entries(P_ROUTE).filter(([,v])=>v.route==="review");const el=document.getElementById("rq");if(el)el.innerHTML=q.length?q.map(([k,v])=>`<div>• ${k.replace("|"," · ")} p=${v.p.toFixed(2)} <span class=small>${v.notes.slice(0,2).join("; ")}</span></div>`).join(""):"Empty — all decisions above threshold.";}const P_rect=(res,i)=>res.rects[i];
+const CFG={gap:Adapt.DEFAULT_PRODUCT_GAP,thr:.8},P_ROUTE={};function renderRQ(){const q=Object.entries(P_ROUTE).filter(([,v])=>v.route==="review"),el=document.getElementById("rq");if(!el)return;el.replaceChildren();if(!q.length){el.textContent="Empty — all decisions above threshold.";return}for(const [key,value] of q){const row=document.createElement("div"),notes=document.createElement("span");row.textContent="• "+key.replace("|"," · ")+" p="+value.p.toFixed(2)+" ";notes.className="small";notes.textContent=value.notes.slice(0,2).join("; ");row.append(notes);el.append(row)}}const P_rect=(res,i)=>res.rects[i];
 var ART={a:null,an:null};
 const ST={ai:{},manual:{},mov:{}},HIST=[];let SEL=null,P_TPL=null;
 const keyOf=(row,s)=>row.version_id+"|"+s.name;
@@ -270,7 +270,7 @@ function drawFlattenedMaster(ctx,s,m){
 }
 function draw(ctx,row,s,P,forceTpl){const tw=s.w,th=s.h;
   if(!P)useMaster(s,row);
-  if(calibrationReady(ART))return drawGuided(ctx,ART,s);
+  if(calibrationReady(ART,[s]))return drawGuided(ctx,ART,s);
   if(ART&&ART.a&&ART.a.source&&ART.a.source.format==='image'&&ART.a.composite){
     drawFlattenedMaster(ctx,s,ART);return P||{PXMODE:'flattened artwork · full creative preserved'};
   }
@@ -303,10 +303,10 @@ function badge(P,d){if(d.rule){const e=document.createElement("span");e.classNam
   e.onclick=ev=>{ev.stopPropagation();toggleAI(k,d.id,d.label);};return e;}
 function tileCanvas(row,s,maxW,maxH){const q=Math.min(maxW/s.w,maxH/s.h),dpr=window.devicePixelRatio||1,c=document.createElement("canvas");
   c.width=Math.max(1,Math.round(s.w*q*dpr));c.height=Math.max(1,Math.round(s.h*q*dpr));c.style.width=s.w*q+"px";c.style.height=s.h*q+"px";
-  const ctx=c.getContext("2d");ctx.scale(q*dpr,q*dpr);const P=draw(ctx,row,s),master=masterFor(s,row);const ready=master&&calibrationReady(master)?prepareVectorLayout(master,s,proofForScreen(master,s),q*dpr,q*dpr).then(()=>{ctx.clearRect(0,0,s.w,s.h);draw(ctx,row,s)}):Promise.resolve();return {c,P,ready};}
+  const ctx=c.getContext("2d");ctx.scale(q*dpr,q*dpr);const P=draw(ctx,row,s),master=masterFor(s,row);const ready=master&&calibrationReady(master,[s])?prepareVectorLayout(master,s,proofForScreen(master,s),q*dpr,q*dpr).then(()=>{ctx.clearRect(0,0,s.w,s.h);draw(ctx,row,s)}):Promise.resolve();return {c,P,ready};}
 
 let ARTS=[],ACT=0;
-function psdFromBuf(buf,file){const p=readPsd(new Uint8Array(buf),{skipLayerImageData:false,skipThumbnail:true,skipCompositeImageData:false});bakeOverlays(p.children);const a=Adapt.fromAgPsd(p,file);Object.defineProperty(a,"psdBuffer",{value:buf,enumerable:false});if(p.canvas)Object.defineProperty(a,"composite",{value:p.canvas,enumerable:false});return a;}
+function psdFromBuf(buf,file){const p=readPsd(new Uint8Array(buf),{skipLayerImageData:false,skipThumbnail:true,skipCompositeImageData:false,totalMemoryLimit:256*1024*1024});bakeOverlays(p.children);const a=Adapt.fromAgPsd(p,file);Object.defineProperty(a,"psdBuffer",{value:buf,enumerable:false});if(p.canvas)Object.defineProperty(a,"composite",{value:p.canvas,enumerable:false});return a;}
 function autoIdx(s,row){if(!ARTS.length)return -1;const M=ARTS.map(a=>({w:a.a.w,h:a.a.h,lang:a.lang||""}));return row?Adapt.pickMasterForLang(M,s.w,s.h,row.lang).index:Adapt.pickMaster(M,s.w,s.h).index;}
 function masterIdx(s,row){const o=ST.mov[s.name];if(o!=null&&ARTS[o]&&(!row||!ARTS[o].lang||ARTS[o].lang===row.lang))return o;return autoIdx(s,row);}
 function useMaster(s,row){const i=masterIdx(s,row);ART=i>=0?ARTS[i]:{a:null,an:null};}
@@ -416,7 +416,7 @@ export async function renderFull(row, screen, options = {}) {
   const master=masterFor(screen,row)
   if(!master)throw new Error('No '+row.lang+' master is assigned. Import or assign a matching master.')
   if(options.transparentBackground&&master.a.source?.format==='image')throw new Error('Transparent background export requires a separate background layer. This master is flattened.')
-  if(!calibrationReady(master))throw new Error('Approve all five calibration guides before batch export.')
+  if(!calibrationReady(master,[screen]))throw new Error('Approve the layout guide required by '+screen.name+' before export.')
   const output=master.calibration?.outputs?.[screenProofKey(screen)]
   if(output&&(!output.approved||output.sourceSignature!==sourceSignature(master)))throw new Error(screen.name+': approve this refined adaptation before exporting.')
   if(output&&guideFindings(master,screen,guideLayout(master,screen,output),output).some(i=>i.blocked))throw new Error(screen.name+': resolve blocking findings before exporting.')
