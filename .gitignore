@@ -9,3 +9,10 @@ test-results/
 
 dist-extension/
 artifacts/
+
+# Local artwork is never part of the distributed application.
+samples/real/
+shots/client-*/
+shots/real-*.png
+shots/mock-tag-*.png
+docs/*problem-pack*.zip
