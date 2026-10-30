@@ -191,7 +191,31 @@ function drawPx(ctx,row,s,P){const tw=s.w,th=s.h,m=ART,bi=bgInfo(m);CPX=[];
   P.PXC=pxContrast(ctx,m,P);
   if(s.faces&&s.faces.length>1){ctx.save();ctx.strokeStyle="rgba(255,255,255,.7)";ctx.setLineDash([Math.max(tw,th)*.01,Math.max(tw,th)*.008]);ctx.lineWidth=Math.max(tw,th)*.003;s.faces.forEach(f=>ctx.strokeRect(f.x,f.y,f.w,f.h));ctx.restore();}
   return P;}
-function draw(ctx,row,s,P,forceTpl){const tw=s.w,th=s.h;P=P||plan(row,s,forceTpl);if(hasPx())return drawPx(ctx,row,s,P);
+/**
+ * Flattened PNG/JPG/WebP assets cannot be safely reflowed into new ratios.
+ * Preserve every original pixel using contain, with a soft ambient extension.
+ * The same drawing path powers both previews and PNG exports.
+ */
+function drawFlattenedMaster(ctx,s,m){
+  const src=m.a.composite,tw=s.w,th=s.h,sw=src.width,sh=src.height;
+  if(!(tw>0&&th>0&&sw>0&&sh>0))return;
+  const cover=Math.max(tw/sw,th/sh),cw=sw*cover,ch=sh*cover;
+  ctx.save();
+  ctx.fillStyle='#17202b';ctx.fillRect(0,0,tw,th);
+  if(typeof ctx.filter==='string')ctx.filter='blur('+Math.max(8,Math.round(Math.min(tw,th)*.035))+'px) brightness(0.55)';
+  else ctx.globalAlpha=.35;
+  ctx.drawImage(src,(tw-cw)/2,(th-ch)/2,cw,ch);
+  ctx.restore();
+  const margin=Math.min(tw,th)*.045;
+  const fit=Math.min((tw-2*margin)/sw,(th-2*margin)/sh);
+  const w=sw*fit,h=sh*fit;
+  ctx.drawImage(src,(tw-w)/2,(th-h)/2,w,h);
+}
+function draw(ctx,row,s,P,forceTpl){const tw=s.w,th=s.h;
+  if(!P){useMaster(s,row);if(ART&&ART.a&&ART.a.source&&ART.a.source.format==='image'&&ART.a.composite){
+    drawFlattenedMaster(ctx,s,ART);return {PXMODE:'flattened artwork · full creative preserved'};
+  }}
+  P=P||plan(row,s,forceTpl);if(hasPx())return drawPx(ctx,row,s,P);
   P.ml.forEach((m,i)=>{const r=P.RECTS[i];if(!r)return;if(m.L.kind==="text"&&!P.T[m.L.id])return;const L=m.L;ctx.save();
     if(L.kind==="bg"){let c;if(aiOn(P.k,"crop")){c=Adapt.saliencyCrop(AI.sal,AI.W,AI.H,tw/th);const q=PHOTO.width/AI.W;c={x:c.x*q,y:c.y*q,w:c.w*q,h:c.h*q};}
       else{const f=Math.max(tw/PHOTO.width,th/PHOTO.height);c={w:tw/f,h:th/f};c.x=(PHOTO.width-c.w)/2;c.y=(PHOTO.height-c.h)/2;}
