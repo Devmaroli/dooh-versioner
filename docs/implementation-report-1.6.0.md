@@ -1,6 +1,6 @@
 # Implementation report — DOOH Creative Studio v1.6.0
 
-Delivered locally on feature/per-screen-refinement. Production/main were not merged or deployed during these milestones.
+This report records local verification on feature/per-screen-refinement before GitHub publication. The repository pull request records the subsequent merge and deployment state.
 
 ## Free Transform milestone
 

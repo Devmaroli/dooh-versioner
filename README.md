@@ -7,7 +7,7 @@ See [Chrome installation and IT handoff](docs/chrome-extension.md), [security re
 ## App
 
 ```bash
-npm install
+npm ci          # Node 22.12+ or 24
 npm run dev      # Vite, open the printed URL
 npm test         # engine/tests under Vitest
 npm run build    # production bundle in dist/
@@ -22,6 +22,16 @@ Import PSD/PSB, SVG or raster masters, confirm their language and semantic roles
 | `src/engine/render.js` | Tile drawing from `proto/index.html`: PSD pixels, colour overlay, drop shadow, glow, stroke, tagline split, language masters. |
 | `src/data/` | Screen list built with the v1.5 importer from the Screen Manager JSON in `src/data/screens/`. |
 | `src/engine/__tests__/` | The checks from `engine/tests/`, run by Vitest. |
+
+## Chrome extension
+
+Build the offline Manifest V3 package with `npm run build:extension`. Load the generated `dist-extension/` folder only where your organisation permits unpacked extensions; managed office deployment needs your IT-approved Chrome distribution route. The extension requests no browser/host permissions and opens the editor in a full tab. The toolbar icon uses the selected Adapt artwork, and v1.6.0 is visible in both the launcher and editor.
+
+## Release information
+
+See [v1.6.0 release notes](CHANGELOG.md), the [implementation report](docs/implementation-report-1.6.0.md), and [security audit](docs/security-audit.md). Validation recorded for this release: 79 unit tests, 21 web browser tests, two extension-origin tests, production/extension builds and both typechecks. Full and production dependency scans reported zero known advisories on 2026-10-31. This is a bounded review, not an antivirus certification or a guarantee against unknown vulnerabilities.
+
+PSD adaptations retain independent pixel layers and native blend/opacity; supported original native layers and embedded Illustrator objects are retained separately in a hidden source folder. PDF is a lossless flattened visual export. Review advanced Photoshop fidelity before production.
 
 ## Folder map
 
