@@ -94,9 +94,12 @@ function LayerPreview({layer}: {layer: ArtworkLayer}) {
 function LayerTagger({art,onChange}: {art:Artwork;onChange:()=>void}) {
   const layers=useMemo(()=>leafLayers(art.a.layers as ArtworkLayer[]).filter(l=>!l.hidden&&!!l.box),[art])
   const [cursor,setCursor]=useState(0)
+  const [details,setDetails]=useState<Record<string,{required:boolean;anchor:string;orientation:string}>>({})
   useEffect(()=>setCursor(0),[art])
   const layer=layers[Math.min(cursor,Math.max(0,layers.length-1))]
   const role=art.an.roles.find((r:{id:string;role:string})=>r.id===layer?.id)
+  const placement=layer ? (details[layer.id]||{required:role?.role==='headline'||role?.role==='legal',anchor:role?.role==='legal'?'nearest':'free',orientation:'preserve'}) : {required:false,anchor:'free',orientation:'preserve'}
+  function updatePlacement(patch:Partial<typeof placement>){if(!layer)return;const next={...placement,...patch};setDetails(prev=>({...prev,[layer.id]:next}));const metadata=art as Artwork & {layerConstraints?:Record<string,typeof placement>};metadata.layerConstraints={...metadata.layerConstraints,[layer.id]:next};onChange()}
   const assigned=layers.filter(l=>art.an.roles.some((r:{id:string;role:string})=>r.id===l.id&&r.role!=='ignore'&&r.role!=='unassigned')).length
   function tag(next:string){
     if(!layer)return
@@ -105,6 +108,7 @@ function LayerTagger({art,onChange}: {art:Artwork;onChange:()=>void}) {
     // Pixel units are cached by semantic role; changing a tag must rebuild them.
     delete (art as Artwork & {U?:unknown}).U
     delete (art as Artwork & {BG?:unknown}).BG
+    if(next==='legal')updatePlacement({required:true,anchor:'nearest'});
     onChange()
     if(cursor<layers.length-1)setCursor(cursor+1)
   }
@@ -114,7 +118,7 @@ function LayerTagger({art,onChange}: {art:Artwork;onChange:()=>void}) {
     <div className="tagger-body"><div className="tagger-visual"><LayerPreview layer={layer}/><strong>{layer.name||'Unnamed layer'}</strong><small>{layer.kind||'Layer'} · {layer.box?.[2]} × {layer.box?.[3]} px</small></div>
       <div className="tagger-question"><h3>What is this layer?</h3><p>Suggested: <b>{role?.role||'Not identified'}</b> — confirm or correct it.</p>
         <div className="tag-options">{TAGS.map(([id,label])=><button key={id} type="button" className={role?.role===id?'chosen':''} onClick={()=>tag(id)}>{label}</button>)}</div>
-        <div className="tagger-controls"><button className="ghost" type="button" disabled={cursor===0} onClick={()=>setCursor(cursor-1)}>← Previous</button><span>{cursor+1} of {layers.length}</span><button className="ghost" type="button" disabled={cursor===layers.length-1} onClick={()=>setCursor(cursor+1)}>Skip / Next →</button></div>
+        <div className="layer-behavior"><h4>Placement & preservation</h4><label><input type="checkbox" checked={placement.required} onChange={e=>updatePlacement({required:e.target.checked})}/> Required in every adaptation</label><label>Position<select value={placement.anchor} onChange={e=>updatePlacement({anchor:e.target.value})}><option value="free">Adapt freely</option><option value="nearest">Stay near original edge</option><option value="top">Top edge</option><option value="right">Right edge</option><option value="bottom">Bottom edge</option><option value="left">Left edge</option><option value="locked">Keep original position</option></select></label><label>Orientation<select value={placement.orientation} onChange={e=>updatePlacement({orientation:e.target.value})}><option value="preserve">Preserve original</option><option value="horizontal">Horizontal</option><option value="vertical">Vertical</option></select></label><small>These preferences are recorded for the future constraint-based renderer; they do not yet reposition artwork.</small></div><div className="tagger-controls"><button className="ghost" type="button" disabled={cursor===0} onClick={()=>setCursor(cursor-1)}>← Previous</button><span>{cursor+1} of {layers.length}</span><button className="ghost" type="button" disabled={cursor===layers.length-1} onClick={()=>setCursor(cursor+1)}>Skip / Next →</button></div>
       </div></div>
     <div className="tagger-list">{layers.map((l,i)=><button type="button" key={l.id} className={i===cursor?'selected':''} onClick={()=>setCursor(i)}>{i+1}. {l.name||'Unnamed'} <span>{art.an.roles.find((r:{id:string;role:string})=>r.id===l.id)?.role||'unassigned'}</span></button>)}</div>
   </section>
