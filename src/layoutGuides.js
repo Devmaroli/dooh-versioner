@@ -9,7 +9,7 @@ export const FAMILIES = ['landscape', 'ultrawide', 'ultratall', 'vertical', 'com
 export const GUIDE_PRESETS = ['2.6 Screen', 'Al Salam Mall', 'Al Nassar Tower Vertical', 'Alshaheed - Mupi', 'The Gate Mall Outdoor']
 export function layoutFamily(screen) {
   const ratio = screen.w / screen.h
-  return ratio < .33 ? 'ultratall' : ratio < .85 ? 'vertical' : ratio < 1.8 ? 'compact' : ratio >= 4 ? 'ultrawide' : 'landscape'
+  return ratio < .33 ? 'ultratall' : ratio < .85 ? 'vertical' : ratio < 1.6 ? 'compact' : ratio >= 4 ? 'ultrawide' : 'landscape'
 }
 export const screenProofKey = screen => JSON.stringify([screen.name,screen.w,screen.h])
 export function proofForScreen(art,screen) { return art.calibration?.outputs?.[screenProofKey(screen)] || art.calibration?.proofs?.[layoutFamily(screen)] }
@@ -20,9 +20,13 @@ export function createScreenProof(art,screen) {
 export function sourceSignature(art) {
   return JSON.stringify(['individual-layers-v2', art.an.roles.map(r => [r.id, r.role, r.confidence === 1 || !!r.confirmed]), art.layerConstraints || {}, art.backgroundRegion || null, art.layerVisibility || {}, art.layerLinks || [], art.layerCrops || {}, art.originalBorder || null, art.wordPieces || []])
 }
-export function calibrationReady(art) {
+export function requiredFamilies(screens) {
+  return screens ? FAMILIES.filter(family => screens.some(screen => layoutFamily(screen) === family)) : FAMILIES
+}
+export function calibrationReady(art, screens) {
   const signature = sourceSignature(art)
-  return !!art.calibration?.enabled && FAMILIES.every(f => art.calibration.proofs[f]?.approved && art.calibration.proofs[f].sourceSignature === signature)
+  const families = requiredFamilies(screens)
+  return !!art.calibration?.enabled && families.length > 0 && families.every(f => art.calibration.proofs[f]?.approved && art.calibration.proofs[f].sourceSignature === signature)
 }
 export function contentUnits(art, detached = [], panel) {
   const visibility = { ...art.layerVisibility }

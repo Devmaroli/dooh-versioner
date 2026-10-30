@@ -1,7 +1,7 @@
 import { expect, test } from 'vitest'
 import { allLayers, selectLayers, linkLayers, unlinkLayers, setLayerVisibility } from '../../artwork.js'
 import { backgroundCrop, rectangleBetween } from '../../background.js'
-import { FAMILIES, GUIDE_PRESETS, calibrationReady, contentUnits, initialProof, layoutFamily, guideLayout, guideFindings, sourceSignature } from '../../layoutGuides.js'
+import { FAMILIES, GUIDE_PRESETS, calibrationReady, requiredFamilies, contentUnits, initialProof, layoutFamily, guideLayout, guideFindings, sourceSignature } from '../../layoutGuides.js'
 import { metadataFor, restoreMetadata } from '../../project.js'
 import { borderGeometry, drawOriginalBorder, detectSourceBorder } from '../../border.js'
 import { arrangeFrames, splitSourceWords } from '../../words.js'
@@ -11,6 +11,19 @@ function fixture() {
   layers.forEach(l => Object.defineProperty(l, 'px', { value: {} }))
   return { id: 'asset', a: { w: 1000, h: 600, layers }, an: { roles: [{ id: 'h', role: 'headline', confidence: 1 }, { id: 'yellow', role: 'headline', confidence: 1 }, { id: 'o', role: 'offer', confidence: 1 }] }, layerConstraints: {}, layerLinks: [] }
 }
+
+test('only selected layout families require approval; expanding targets or changing source invalidates readiness', () => {
+  const art = fixture(), mupi = { w: 1080, h: 1920 }, ribbon = { w: 7680, h: 1152 }
+  art.calibration = { enabled: true, proofs: { vertical: { approved: true, sourceSignature: sourceSignature(art) } } }
+  expect(requiredFamilies([mupi, mupi])).toEqual(['vertical'])
+  expect(layoutFamily({ w: 1920, h: 1080 })).toBe('landscape')
+  expect(calibrationReady(art, [mupi])).toBe(true)
+  expect(calibrationReady(art, [])).toBe(false)
+  expect(calibrationReady(art, [mupi, ribbon])).toBe(false)
+  expect(calibrationReady(art)).toBe(false)
+  art.layerConstraints.h = { required: true }
+  expect(calibrationReady(art, [mupi])).toBe(false)
+})
 
 test('matching semantic roles never link unrelated source layers and legacy cluster frames are separated', () => {
   const art = fixture(), screen = { w: 1080, h: 1920 }

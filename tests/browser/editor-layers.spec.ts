@@ -77,7 +77,7 @@ test('actual source rows, background, border and anchored stamp/logo link are us
   expect(Number(await borderWidth.inputValue())).toBeCloseTo(initialWidth, 1)
   await page.getByRole('button', { name: 'Redo', exact: true }).click()
   const savedBorderWidth = await borderWidth.inputValue()
-  await page.getByRole('button', { name: 'Back to five previews', exact: false }).click()
+  await page.getByRole('button', { name: 'Back to layout previews', exact: false }).click()
   await page.getByRole('button', { name: 'Edit Alshaheed - Mupi', exact: true }).click()
   await page.getByRole('button', { name: /Original border.*Vector rectangle/ }).click()
   await expect(page.getByLabel('Border thickness (this layout, source px)', { exact: true })).toHaveValue('11')

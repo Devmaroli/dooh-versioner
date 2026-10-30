@@ -63,7 +63,7 @@ test('IKEA headline becomes separate source-pixel words; editor groups, aligns a
   const x = Number(await page.getByLabel('X position (%)', { exact: true }).inputValue()), w = Number(await page.getByLabel('Width (%)', { exact: true }).inputValue())
   expect(x + w / 2).toBeCloseTo(50, 1)
   await page.screenshot({ path: 'work/source-word-editor.png' })
-  await page.getByRole('button', { name: 'Back to five previews', exact: false }).click()
+  await page.getByRole('button', { name: 'Back to layout previews', exact: false }).click()
   await expect(page.getByText('Saved on this device')).toBeVisible()
   await page.reload(); await page.getByRole('button', { name: /3 · Adapt/ }).click()
   await page.getByRole('button', { name: 'Edit Alshaheed - Mupi', exact: true }).click()

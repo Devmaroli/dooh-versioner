@@ -58,7 +58,7 @@ test('layer thumbnails, locks, fill, masks, styles, groups and adjustments affec
   await page.getByRole('button',{name:'Delete layer',exact:true}).click();expect(await sample()).toEqual([160,80,40,255])
   await page.getByRole('button',{name:'Create new layer',exact:true}).click();expect(await sample()).toEqual([160,80,40,255]);await page.getByRole('button',{name:'Delete layer',exact:true}).click()
   await page.getByLabel('Layer thumbnail size').selectOption('200');await page.screenshot({path:'work/layers-panel-200.png'})
-  await page.getByRole('button',{name:'Back to five previews',exact:false}).click();await expect(page.getByText('Saved on this device')).toBeVisible();await page.reload()
+  await page.getByRole('button',{name:'Back to layout previews',exact:false}).click();await expect(page.getByText('Saved on this device')).toBeVisible();await page.reload()
   await page.getByRole('button',{name:/3 · Adapt/}).click();await page.getByRole('button',{name:'Edit Alshaheed - Mupi',exact:true}).click()
   await expect(page.getByLabel('Layer thumbnail size')).toHaveValue('200');await expect(page.getByRole('button',{name:'Select layer Campaign headline',exact:true})).toBeVisible();expect(await sample()).toEqual([160,80,40,255]);expect(errors).toEqual([])
 })
