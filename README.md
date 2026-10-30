@@ -4,7 +4,7 @@ Version **1.6.0** provides the React six-stage workflow, source-layer analysis, 
 
 See [Chrome installation and IT handoff](docs/chrome-extension.md), [security review](docs/security-audit.md), [export formats and PSD limitations](docs/export-formats.md), [selected targets](docs/selected-targets.md), and [Free Transform](docs/free-transform.md).
 
-This is a **private** repository. `samples/real/` and `shots/client-rio` are confidential client artwork (Bolton Group, Rio). The same Rio captures also sit at the repo root as `shots/real-*.png` and `shots/mock-tag-*.png`. Keep them here; do not publish them.
+GitHub currently lists this repository as **public**. Legacy client material needs a separate privacy review. `samples/real/` and `shots/client-rio` are confidential client artwork (Bolton Group, Rio). The same Rio captures also sit at the repo root as `shots/real-*.png` and `shots/mock-tag-*.png`. Keep them here; do not publish them.
 
 The static prototype is deployed at [https://dooh-versioner-proto.vercel.app](https://dooh-versioner-proto.vercel.app). `proto/` is unchanged. The React app evolves that renderer with source-aware guides, editing and validation.
 
