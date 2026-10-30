@@ -1,0 +1,51 @@
+[
+  {
+    "name": "Alshaheed - Extreme Entrance Parking Basement 1",
+    "w": 3440,
+    "h": 1032,
+    "group": "Al Shaheed",
+    "selected": false
+  },
+  {
+    "name": "Alshaheed - Ice Rink Ticketing",
+    "w": 1720,
+    "h": 1032,
+    "group": "Al Shaheed",
+    "selected": false
+  },
+  {
+    "name": "Alshaheed - Ice Rink High Wall",
+    "w": 1024,
+    "h": 512,
+    "group": "Al Shaheed",
+    "selected": false
+  },
+  {
+    "name": "Alshaheed - Karting Track Big Wall",
+    "w": 2816,
+    "h": 1024,
+    "group": "Al Shaheed",
+    "selected": false
+  },
+  {
+    "name": "Alshaheed - Karting Area High Wall Behind Chairs",
+    "w": 6880,
+    "h": 1032,
+    "group": "Al Shaheed",
+    "selected": false
+  },
+  {
+    "name": "Alshaheed - Snow Fun High Wall",
+    "w": 768,
+    "h": 1280,
+    "group": "Al Shaheed",
+    "selected": false
+  },
+  {
+    "name": "Alshaheed - Mupi",
+    "w": 1080,
+    "h": 1920,
+    "group": "Al Shaheed",
+    "selected": false
+  }
+]
