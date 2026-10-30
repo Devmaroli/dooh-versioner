@@ -306,7 +306,7 @@ function tileCanvas(row,s,maxW,maxH){const q=Math.min(maxW/s.w,maxH/s.h),dpr=win
   const ctx=c.getContext("2d");ctx.scale(q*dpr,q*dpr);const P=draw(ctx,row,s),master=masterFor(s,row);const ready=master&&calibrationReady(master)?prepareVectorLayout(master,s,proofForScreen(master,s),q*dpr,q*dpr).then(()=>{ctx.clearRect(0,0,s.w,s.h);draw(ctx,row,s)}):Promise.resolve();return {c,P,ready};}
 
 let ARTS=[],ACT=0;
-function psdFromBuf(buf,file){const p=readPsd(new Uint8Array(buf),{skipLayerImageData:false,skipThumbnail:true,skipCompositeImageData:false});bakeOverlays(p.children);const a=Adapt.fromAgPsd(p,file);if(p.canvas)Object.defineProperty(a,"composite",{value:p.canvas,enumerable:false});return a;}
+function psdFromBuf(buf,file){const p=readPsd(new Uint8Array(buf),{skipLayerImageData:false,skipThumbnail:true,skipCompositeImageData:false});bakeOverlays(p.children);const a=Adapt.fromAgPsd(p,file);Object.defineProperty(a,"psdBuffer",{value:buf,enumerable:false});if(p.canvas)Object.defineProperty(a,"composite",{value:p.canvas,enumerable:false});return a;}
 function autoIdx(s,row){if(!ARTS.length)return -1;const M=ARTS.map(a=>({w:a.a.w,h:a.a.h,lang:a.lang||""}));return row?Adapt.pickMasterForLang(M,s.w,s.h,row.lang).index:Adapt.pickMaster(M,s.w,s.h).index;}
 function masterIdx(s,row){const o=ST.mov[s.name];if(o!=null&&ARTS[o]&&(!row||!ARTS[o].lang||ARTS[o].lang===row.lang))return o;return autoIdx(s,row);}
 function useMaster(s,row){const i=masterIdx(s,row);ART=i>=0?ARTS[i]:{a:null,an:null};}
@@ -412,9 +412,10 @@ export function masterFor(screen, row) {
 export function renderTile(row, screen, maxW, maxH) {
   return tileCanvas(row, screen, maxW, maxH)
 }
-export async function renderFull(row, screen) {
+export async function renderFull(row, screen, options = {}) {
   const master=masterFor(screen,row)
   if(!master)throw new Error('No '+row.lang+' master is assigned. Import or assign a matching master.')
+  if(options.transparentBackground&&master.a.source?.format==='image')throw new Error('Transparent background export requires a separate background layer. This master is flattened.')
   if(!calibrationReady(master))throw new Error('Approve all five calibration guides before batch export.')
   const output=master.calibration?.outputs?.[screenProofKey(screen)]
   if(output&&(!output.approved||output.sourceSignature!==sourceSignature(master)))throw new Error(screen.name+': approve this refined adaptation before exporting.')
@@ -422,7 +423,7 @@ export async function renderFull(row, screen) {
   await prepareVectorLayout(master,screen,proofForScreen(master,screen))
   const c=document.createElement('canvas');c.width=screen.w;c.height=screen.h
   master.requireVector=true
-  try{draw(c.getContext('2d'),row,screen)}finally{delete master.requireVector}
+  try{drawGuided(c.getContext('2d'),master,screen,proofForScreen(master,screen),null,options.transparentBackground)}finally{delete master.requireVector}
   return c
 }
 export function artLang(entry) {
@@ -438,8 +439,9 @@ export async function prepareVectorLayout(art,screen,proof,pixelScale=1,pixelSca
     if(!art.VR.has(key)){const canvas=await renderVectorCrop(layer,unit.box,w,h);if(art.VR.size>=128)art.VR.delete(art.VR.keys().next().value);art.VR.set(key,canvas)}
   }
 }
-function drawGuided(ctx,art,screen,proof){
-  const current=proof||proofForScreen(art,screen),layout=guideLayout(art,screen,current),issues=guideFindings(art,screen,layout,current),background=art.a.source?.format==='image'?null:bgInfo(art),sources=allLayers(art);
+function drawGuided(ctx,art,screen,proof,capture,omitBackground=false){
+  const current=proof||proofForScreen(art,screen),layout=guideLayout(art,screen,current),issues=guideFindings(art,screen,layout,current),background=art.a.source?.format==='image'?null:bgInfo(art),sources=allLayers(art).filter(l=>!capture?.sourceId||l.id===capture.sourceId).map(l=>capture?{...l,effectiveHidden:false}:l);
+  const appearance=(...args)=>capture?{blend:"normal",opacity:1}:layerStyle(...args);
   const signature=sourceSignature(art);
   if(art.GU?.signature!==signature)art.GU={signature,units:{}};
   art.PA=art.PA||new Map();
@@ -447,14 +449,14 @@ function drawGuided(ctx,art,screen,proof){
   function targetFor(id){const f=layout.find(u=>u.id===id)?.frame;if(f)return {x:f.x*screen.w,y:f.y*screen.h,w:f.w*screen.w,h:f.h*screen.h};if(id==='__background'&&background)return backgroundFrame(background.source,screen,current?.backgroundTransform);if(id==='__border')return borderGeometry(art,screen,layout,current);return {x:0,y:0,w:screen.w,h:screen.h};}
   function paintPixels(g,id,node){
     if(id==='__background'){
-      if(background){const f=targetFor(id),style=layerStyle({...background.L,parentOpacity:current?.panel?1:background.L.parentOpacity},current?.layerStyles?.[id]),rawBox=art.backgroundRegion?backgroundCrop(art.backgroundRegion,background.L,art.a.w,art.a.h):null,box=rawBox||{x:background.L.box[0],y:background.L.box[1],w:background.L.box[2],h:background.L.box[3]},layer={...background.L,px:background.source,box:[box.x,box.y,box.w,box.h],sourceBox:[box.x,box.y,box.w,box.h],crop:null},source=preparedLayerSource(layer,box,node,art.PA)||background.source;
+      if(background){const f=targetFor(id),style=appearance({...background.L,parentOpacity:current?.panel?1:background.L.parentOpacity},current?.layerStyles?.[id]),rawBox=art.backgroundRegion?backgroundCrop(art.backgroundRegion,background.L,art.a.w,art.a.h):null,box=rawBox||{x:background.L.box[0],y:background.L.box[1],w:background.L.box[2],h:background.L.box[3]},layer={...background.L,px:background.source,box:[box.x,box.y,box.w,box.h],sourceBox:[box.x,box.y,box.w,box.h],crop:null},source=preparedLayerSource(layer,box,node,art.PA)||background.source;
         compositeDraw(g,t=>{t.save();clipPanelMask(t,node?.mask,f,screen);t.drawImage(source,f.x,f.y,f.w,f.h);t.restore()},style,f);
       }return;
     }
     if(id==='__border'){
       const f=targetFor(id);if(f){const bounds={x:f.x-f.thickness,y:f.y-f.thickness,w:f.w+2*f.thickness,h:f.h+2*f.thickness};let source=null;
         if(node?.fx?.stroke?.enabled){source=document.createElement('canvas');source.width=Math.max(1,Math.ceil(bounds.w));source.height=Math.max(1,Math.ceil(bounds.h));const t=source.getContext('2d');t.translate(-bounds.x,-bounds.y);drawOriginalBorder(t,art,screen,layout,current);t.resetTransform();stylePixels(source,node.fill,node.fx);}
-        compositeDraw(g,t=>{t.save();clipPanelMask(t,node?.mask,f,screen);if(source)t.drawImage(source,bounds.x,bounds.y,bounds.w,bounds.h);else{t.globalAlpha*=node?.fill??1;drawOriginalBorder(t,art,screen,layout,current);}t.restore()},layerStyle(null,current?.layerStyles?.[id]),bounds);
+        compositeDraw(g,t=>{t.save();clipPanelMask(t,node?.mask,f,screen);if(source)t.drawImage(source,bounds.x,bounds.y,bounds.w,bounds.h);else{t.globalAlpha*=node?.fill??1;drawOriginalBorder(t,art,screen,layout,current);}t.restore()},appearance(null,current?.layerStyles?.[id]),bounds);
       }return;
     }
     const unit=layout.find(u=>u.id===id);if(!unit)return;
@@ -462,18 +464,19 @@ function drawGuided(ctx,art,screen,proof){
     const f=unit.frame,target=targetFor(id);
     if(id==='flattened'){
       const fake={id:'flattened',px:source,box:[0,0,source.width,source.height],fillOpacity:1},material=preparedLayerSource(fake,{x:0,y:0,w:source.width,h:source.height},node,art.PA)||source;
-      compositeDraw(g,t=>{t.save();clipPanelMask(t,node?.mask,target,screen);t.drawImage(material,target.x,target.y,target.w,target.h);t.restore()},layerStyle(null,current?.layerStyles?.flattened),target);
+      compositeDraw(g,t=>{t.save();clipPanelMask(t,node?.mask,target,screen);t.drawImage(material,target.x,target.y,target.w,target.h);t.restore()},appearance(null,current?.layerStyles?.flattened),target);
     }else for(const layer of sources.filter(l=>unit.layerIds.includes(l.id)).reverse()){
       const view=g.getTransform(),vector=layer.vectorWord&&art.VR?.get(vectorRasterKey(layer,unit.box,target.w*Math.hypot(view.a,view.b),target.h*Math.hypot(view.c,view.d)))
       if(layer.vectorWord&&!vector&&art.requireVector)throw new Error('Vector source preparation is incomplete. Retry the export; no cached-pixel substitution was exported.')
-      if(vector){vectorWordsRendered++;let material=vector;if((node?.fill??1)!==1||node?.fx?.stroke?.enabled){material=document.createElement('canvas');material.width=vector.width;material.height=vector.height;material.getContext('2d').drawImage(vector,0,0);stylePixels(material,node?.fill??1,node?.fx?.stroke?{stroke:{...node.fx.stroke,width:node.fx.stroke.width*vector.width/unit.box.w}}:null)}const style=layerStyle({...layer,parentOpacity:current?.panel?1:layer.parentOpacity},current?.layerStyles?.[layer.id]||current?.layerStyles?.[layer.wordSourceId]);compositeDraw(g,t=>{t.save();clipPanelMask(t,node?.mask,target,screen);t.drawImage(material,target.x,target.y,target.w,target.h);t.restore()},style,target);continue}
+      if(vector){vectorWordsRendered++;let material=vector;if((node?.fill??1)!==1||node?.fx?.stroke?.enabled){material=document.createElement('canvas');material.width=vector.width;material.height=vector.height;material.getContext('2d').drawImage(vector,0,0);stylePixels(material,node?.fill??1,node?.fx?.stroke?{stroke:{...node.fx.stroke,width:node.fx.stroke.width*vector.width/unit.box.w}}:null)}const style=appearance({...layer,parentOpacity:current?.panel?1:layer.parentOpacity},current?.layerStyles?.[layer.id]||current?.layerStyles?.[layer.wordSourceId]);compositeDraw(g,t=>{t.save();clipPanelMask(t,node?.mask,target,screen);t.drawImage(material,target.x,target.y,target.w,target.h);t.restore()},style,target);continue}
 
-      const style=layerStyle({...layer,parentOpacity:current?.panel?1:layer.parentOpacity},current?.layerStyles?.[layer.id]||current?.layerStyles?.[layer.wordSourceId]),material=preparedLayerSource(layer,unit.box,node,art.PA);
+      const style=appearance({...layer,parentOpacity:current?.panel?1:layer.parentOpacity},current?.layerStyles?.[layer.id]||current?.layerStyles?.[layer.wordSourceId]),material=preparedLayerSource(layer,unit.box,node,art.PA);
       compositeDraw(g,t=>{t.save();clipPanelMask(t,node?.mask,target,screen);if(material)t.drawImage(material,target.x,target.y,target.w,target.h);else{t.translate(target.x,target.y);t.scale(target.w/unit.box.w,target.h/unit.box.h);t.translate(-unit.box.x,-unit.box.y);t.beginPath();t.rect(unit.box.x,unit.box.y,unit.box.w,unit.box.h);t.clip();drawSourceLayers(t,[layer],false,true);}t.restore()},style,target);
     }
   }
-  function paint(g,id,node){const base=targetFor(id),delta=current?.transforms?.[id];g.save();if(node?.mask?.enabled&&node.mask.kind==='path'&&!node.mask.linked&&node.mask.canvasRect)clipPanelMask(g,node.mask,base,screen);if(delta&&base?.w>0&&base?.h>0){const m=worldDelta(base,delta);g.transform(m.a,m.b,m.c,m.d,m.tx,m.ty)}try{paintPixels(g,id,node?.mask?.enabled&&node.mask.kind==='path'&&!node.mask.linked&&node.mask.canvasRect?{...node,mask:{...node.mask,enabled:false}}:node)}finally{g.restore()}}
-  if(current?.panel)paintPanelTree(ctx,current.panel,screen,node=>{const base=targetFor(node.id);return base?rectBounds(base,current?.transforms?.[node.id]):null},(g,node)=>paint(g,node.id,node));
+  function paint(g,id,node){if(omitBackground&&id==='__background')return;const base=targetFor(id),delta=current?.transforms?.[id];g.save();if(node?.mask?.enabled&&node.mask.kind==='path'&&!node.mask.linked&&node.mask.canvasRect)clipPanelMask(g,node.mask,base,screen);if(delta&&base?.w>0&&base?.h>0){const m=worldDelta(base,delta);g.transform(m.a,m.b,m.c,m.d,m.tx,m.ty)}try{paintPixels(g,id,node?.mask?.enabled&&node.mask.kind==='path'&&!node.mask.linked&&node.mask.canvasRect?{...node,mask:{...node.mask,enabled:false}}:node)}finally{g.restore()}}
+  if(capture)paint(ctx,capture.id,capture.node);
+  else if(current?.panel)paintPanelTree(ctx,current.panel,screen,node=>{const base=targetFor(node.id);return base?rectBounds(base,current?.transforms?.[node.id]):null},(g,node)=>paint(g,node.id,node));
   else for(const id of artworkStack(art,screen,current).slice().reverse())paint(ctx,id,null);
   return {layout,issues,vectorWordsRendered,PXMODE:'designer-calibrated '+screen.w+' × '+screen.h};
 }
@@ -535,3 +538,9 @@ export function pickArtwork(art,screen,proof,x,y,pixelScale=1,pixelScaleY=pixelS
 }
 
 export function drawCalibrationInto(canvas,art,screen,proof){const g=canvas.getContext('2d');g.save();g.resetTransform();g.clearRect(0,0,canvas.width,canvas.height);g.scale(canvas.width/screen.w,canvas.height/screen.h);try{return drawGuided(g,art,screen,proof)}finally{g.restore()}}
+
+/** Isolated export pixels omit blend and opacity; PSD stores those natively. */
+export function renderLayerPixels(art,screen,proof,id,node,sourceId){
+ const canvas=document.createElement("canvas");canvas.width=screen.w;canvas.height=screen.h;
+ drawGuided(canvas.getContext("2d"),art,screen,proof,{id,node,sourceId});return canvas;
+}
