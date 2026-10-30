@@ -1,6 +1,18 @@
+import { renderVectorCrop, vectorRasterKey, releaseEmbeddedVectors } from '../embeddedVectors.js'
+import { preparedLayerSource, clipPanelMask, paintPanelTree, stylePixels } from '../panelCompositor.js'
+import { effectiveVisible, ancestors } from '../layerPanelModel'
+import { panelOrder } from '../layerPanelAdapter'
+import { compositeDraw, layerStyle } from '../blending.js'
+import { materialStackOrder } from '../stack.js'
 // Renderer lifted from proto/index.html (v1.5) and wired to proto/adapt.js.
 // Tiles, PSD pixels, tagline reflow, language masters and multi-face handling stay the prototype's.
 import Adapt from './adapt.js'
+import { validateDimensions } from '../project.js'
+import { backgroundCrop, backgroundFrame } from '../background.js'
+import { pickForeground } from '../picking.js'
+import { drawOriginalBorder, borderGeometry } from '../border.js'
+import { allLayers, drawSourceLayers } from '../artwork.js'
+import { layoutFamily, calibrationReady, guideLayout, guideFindings, sourceSignature } from '../layoutGuides.js'
 import { readPsd } from 'ag-psd'
 import { PRESET_FILES, SAMPLE_PSD_B64, SAMPLE_SVG } from './presets.js'
 
@@ -115,15 +127,36 @@ function plan(row,s,forceTpl){useMaster(s,row);
 }
 // ---------- Real artwork pixels (PSD layers via ag-psd). Layers stay separate; the tile places each role unit in its zone ----------
 const flatL=ls=>ls.flatMap(l=>[l,...(l.children?flatL(l.children):[])]);
-function roleLayers(m,role){const ids=new Set(m.an.roles.filter(r=>r.role===role).map(r=>r.id));return flatL(m.a.layers).filter(l=>ids.has(l.id)&&l.px&&!l.hidden);}
+function roleLayers(m,role){const ids=new Set(m.an.roles.filter(r=>r.role===role).map(r=>r.id));const visible=new Set(allLayers(m).filter(l=>!l.effectiveHidden).map(l=>l.id));return flatL(m.a.layers).filter(l=>ids.has(l.id)&&l.px&&visible.has(l.id));}
 function unitCanvas(m,role){m.U=m.U||{};if(m.U[role]!==undefined)return m.U[role];const ls=role.split("+").flatMap(r=>roleLayers(m,r));if(!ls.length)return m.U[role]=null;
   const x0=Math.min(...ls.map(l=>l.box[0])),y0=Math.min(...ls.map(l=>l.box[1])),x1=Math.max(...ls.map(l=>l.box[0]+l.box[2])),y1=Math.max(...ls.map(l=>l.box[1]+l.box[3]));
   const c=document.createElement("canvas");c.width=Math.max(1,x1-x0);c.height=Math.max(1,y1-y0);const g=c.getContext("2d");const order=flatL(m.a.layers);
   ls.slice().sort((p,q)=>order.indexOf(q)-order.indexOf(p)).forEach(l=>{g.save();if(l.opacity!=null)g.globalAlpha=l.opacity;if(l.blend==="multiply")g.globalCompositeOperation="multiply";g.drawImage(l.px,l.box[0]-x0,l.box[1]-y0);g.restore();}); // bottom→top
   return m.U[role]={c,box:[x0,y0,x1-x0,y1-y0]};}
-function bgInfo(m){if(m.BG!==undefined)return m.BG;const L=roleLayers(m,"bg")[0];if(!L)return m.BG=null;const q=document.createElement("canvas");q.width=32;q.height=18;const g=q.getContext("2d");g.drawImage(L.px,0,0,32,18);
-  const d=g.getImageData(0,0,32,18).data;let r=0,gg=0,b=0,v=0;const n=d.length/4;for(let i=0;i<d.length;i+=4){r+=d[i];gg+=d[i+1];b+=d[i+2];}r/=n;gg/=n;b/=n;for(let i=0;i<d.length;i+=4)v+=(d[i]-r)**2+(d[i+1]-gg)**2+(d[i+2]-b)**2;
-  return m.BG={L,flat:Math.sqrt(v/n)<6,color:`rgb(${r|0},${gg|0},${b|0})`,lum:(.2126*r+.7152*gg+.0722*b)/255};}
+function bgInfo(m){
+  if(m.BG!==undefined)return m.BG;
+  const region=m.backgroundRegion;
+  const L=allLayers(m).find(l=>l.px&&!l.effectiveHidden&&(region?l.id===region.layerId:m.an.roles.some(r=>r.id===l.id&&r.role==="bg")));
+  if(!L)return m.BG=null;
+  let source=L.px;
+  if(region){
+    const crop=backgroundCrop(region,L,m.a.w,m.a.h);
+    if(!crop)return m.BG=null;
+    source=document.createElement('canvas');source.width=Math.max(1,Math.round(crop.w));source.height=Math.max(1,Math.round(crop.h));
+    const [x,y,w,h]=L.box;
+    source.getContext('2d').drawImage(L.px,(crop.x-x)*L.px.width/w,(crop.y-y)*L.px.height/h,crop.w*L.px.width/w,crop.h*L.px.height/h,0,0,source.width,source.height);
+  }
+  const q=document.createElement('canvas');q.width=32;q.height=18;const g=q.getContext('2d');g.drawImage(source,0,0,32,18);
+  const d=g.getImageData(0,0,32,18).data;let r=0,gg=0,b=0,v=0;const n=d.length/4;
+  for(let i=0;i<d.length;i+=4){r+=d[i];gg+=d[i+1];b+=d[i+2];}r/=n;gg/=n;b/=n;
+  for(let i=0;i<d.length;i+=4)v+=(d[i]-r)**2+(d[i+1]-gg)**2+(d[i+2]-b)**2;
+  return m.BG={L,source,region:!!region,flat:Math.sqrt(v/n)<6,color:`rgb(${r|0},${gg|0},${b|0})`,lum:(.2126*r+.7152*gg+.0722*b)/255};
+}
+function drawBackgroundPatch(ctx,source,tw,th,focal=[.5,.5]){
+  const scale=Math.max(tw/source.width,th/source.height),w=tw/scale,h=th/scale;
+  const x=Math.max(0,Math.min(source.width-w,focal[0]*source.width-w/2)),y=Math.max(0,Math.min(source.height-h,focal[1]*source.height-h/2));
+  ctx.drawImage(source,x,y,w,h,0,0,tw,th);
+}
 function pxFixStyle(a,an){if(!a.topFirst)return;const m={a,an};const bi=bgInfo(m);if(bi&&bi.flat){const r=an.rules.find(x=>x.key==="artStyle");if(r){r.value="flat";r.why="background pixels are one flat colour ("+bi.color+")";r.overrides="no scrim; extend the colour on any ratio";}}}
 /** Rasterised text line → words by empty alpha columns (gap ≥ 22% of the line height), then re-flowed into the line count that best fits the zone. RTL keeps right-to-left order. */
 function reflowRaster(c,za,rtl,maxN){maxN=maxN||4;c.__rf=c.__rf||{};const key=za.toFixed(2)+rtl+maxN;if(c.__rf[key])return c.__rf[key];const W=c.width,H=c.height,d=c.getContext("2d").getImageData(0,0,W,H).data,col=new Uint8Array(W);
@@ -179,14 +212,14 @@ function drawPx(ctx,row,s,P){const tw=s.w,th=s.h,m=ART,bi=bgInfo(m);CPX=[];
     return P;
   }
   if(Math.abs(Math.log((tw/th)/(m.a.w/m.a.h)))<=0.02&&m.a.composite&&!(s.faces&&s.faces.length>1)){ctx.drawImage(m.a.composite,0,0,tw,th);P.PXMODE="master as-is (same ratio, scaled)";const hu3=unitCanvas(m,"headline");P.PXR={};if(hu3){const f=tw/m.a.w;P.PXR.hlMask=[hu3.c,{x:hu3.box[0]*f,y:hu3.box[1]*f,w:hu3.c.width*f,h:hu3.c.height*f,q:f}];}P.PXC=pxContrast(ctx,m,P);P.PXQ={hlPx:Math.round((hu3?hu3.box[3]:0)*th/m.a.h),hlPct:+((hu3?hu3.box[3]:0)/m.a.h*100).toFixed(1),overlapPx:0,outside:false,mode:P.PXMODE};return P;}
-  if(bi){if(bi.flat){ctx.fillStyle=bi.color;ctx.fillRect(0,0,tw,th);}else{const L=bi.L,f=Math.max(tw/L.px.width,th/L.px.height);const w=tw/f,h=th/f,fo=(m.an.rules.find(r=>r.key==="focal")||{}).value||[.5,.5];
-    const x=Math.max(0,Math.min(L.px.width-w,fo[0]*L.px.width-w/2)),y=Math.max(0,Math.min(L.px.height-h,fo[1]*L.px.height-h/2));ctx.drawImage(L.px,x,y,w,h,0,0,tw,th);}}
+  if(bi){if(bi.flat&&!bi.region){ctx.fillStyle=bi.color;ctx.fillRect(0,0,tw,th);}else drawBackgroundPatch(ctx,bi.source,tw,th,(m.an.rules.find(r=>r.key==='focal')||{}).value||[.5,.5]);}
   else{ctx.fillStyle="#333";ctx.fillRect(0,0,tw,th);}
   const rectOf=kind=>{const i=P.ml.findIndex(x=>x.L.kind===kind);return i>=0?P.RECTS[i]:null;};
   P.PXR={};P.PXHL=0;P.PXC=null;const pr=rectOf("product"),pu=unitCanvas(m,"product");if(pr&&pu)P.PXR.product=contain(ctx,pu.c,pr,.5,1);
   const zone=id=>P.T[id]?P.T[id].r:null,al=row.dir==="rtl"?1:0;const Zs=[zone("headline"),zone("offer"),rectOf("price")].filter(Boolean);
   const hu=unitCanvas(m,"headline"),ou=unitCanvas(m,"offer"),cu2=unitCanvas(m,"headline+offer");
-  if(Zs.length&&cu2){const x0=Math.min(...Zs.map(r=>r.x)),y0=Math.min(...Zs.map(r=>r.y));let Z={x:x0,y:y0,w:Math.max(...Zs.map(r=>r.x+r.w))-x0,h:Math.max(...Zs.map(r=>r.y+r.h))-y0};
+  if(!hu&&ou){const offerZone=zone('offer');if(offerZone)contain(ctx,ou.c,offerZone,al,.5);P.PXMODE='offer only: identify the original main headline';}
+  else if(Zs.length&&cu2){const x0=Math.min(...Zs.map(r=>r.x)),y0=Math.min(...Zs.map(r=>r.y));let Z={x:x0,y:y0,w:Math.max(...Zs.map(r=>r.x+r.w))-x0,h:Math.max(...Zs.map(r=>r.y+r.h))-y0};
     if(P.PXR.product)Z=clipAway(Z,P.PXR.product,Math.min(tw,th)*.03);P.PXR.copyZone=Z;
     const az=Z.w/Z.h,au=cu2.c.width/cu2.c.height,k=Math.max(az/au,au/az);const tall=!!(hu&&ou)&&(az<au*0.75||hu.c.height*Math.min(Z.w/cu2.c.width,Z.h/cu2.c.height)<th*0.025);P.PXMODE=k<=2.2&&!tall?"copy unit":"split";
     if((k<=2.2&&!tall)||!(hu&&ou)){const o=contain(ctx,cu2.c,Z,al,.5);if(hu)P.PXR.hlMask=[hu.c,{x:o.x+(hu.box[0]-cu2.box[0])*o.q,y:o.y+(hu.box[1]-cu2.box[1])*o.q,w:hu.c.width*o.q,h:hu.c.height*o.q,q:o.q}];}
@@ -219,10 +252,14 @@ function drawFlattenedMaster(ctx,s,m){
   if(!(tw>0&&th>0&&sw>0&&sh>0))return;
   const cover=Math.max(tw/sw,th/sh),cw=sw*cover,ch=sh*cover;
   ctx.save();
-  ctx.fillStyle='#17202b';ctx.fillRect(0,0,tw,th);
-  if(typeof ctx.filter==='string')ctx.filter='blur('+Math.max(8,Math.round(Math.min(tw,th)*.035))+'px) brightness(0.55)';
-  else ctx.globalAlpha=.35;
-  ctx.drawImage(src,(tw-cw)/2,(th-ch)/2,cw,ch);
+  const background=m.backgroundRegion?bgInfo(m):null;
+  if(background)drawBackgroundPatch(ctx,background.source,tw,th);
+  else{
+    ctx.fillStyle='#17202b';ctx.fillRect(0,0,tw,th);
+    if(typeof ctx.filter==='string')ctx.filter='blur('+Math.max(8,Math.round(Math.min(tw,th)*.035))+'px) brightness(0.55)';
+    else ctx.globalAlpha=.35;
+    ctx.drawImage(src,(tw-cw)/2,(th-ch)/2,cw,ch);
+  }
   ctx.restore();
   const margin=Math.min(tw,th)*.045;
   const fit=Math.min((tw-2*margin)/sw,(th-2*margin)/sh);
@@ -231,6 +268,7 @@ function drawFlattenedMaster(ctx,s,m){
 }
 function draw(ctx,row,s,P,forceTpl){const tw=s.w,th=s.h;
   if(!P)useMaster(s,row);
+  if(calibrationReady(ART))return drawGuided(ctx,ART,s);
   if(ART&&ART.a&&ART.a.source&&ART.a.source.format==='image'&&ART.a.composite){
     drawFlattenedMaster(ctx,s,ART);return P||{PXMODE:'flattened artwork · full creative preserved'};
   }
@@ -292,6 +330,7 @@ function bakeFx(src,fx){const px=v=>v==null?0:typeof v==="number"?v:+v.value||0,
 
 
 function artLoad(a, thumb) {
+  validateDimensions(a.w, a.h)
   const fonts = [...new Set(JSON.stringify(a.layers).match(/"font":"[^"]+"/g) || [])].map((x) => x.slice(8, -1))
   const an = Adapt.analyseArtwork(a, fonts.filter(fontOK).concat(['__none__']))
   pxFixStyle(a, an)
@@ -301,7 +340,7 @@ function artLoad(a, thumb) {
   let i = ARTS.findIndex((x) => x.a === a)
   if (i < 0) {
     ARTS.push({
-      a, an,
+      id: crypto.randomUUID(), a, an,
       name: (a.source && a.source.file) || 'master',
       thumb: thumb || (a.composite ? a.composite.toDataURL('image/jpeg', 0.6) : null),
       lang: lang || '',
@@ -348,20 +387,139 @@ export function importRasterCanvas(canvas, name) {
   artLoad(a, canvas.toDataURL('image/jpeg', 0.6))
   return ARTS.length
 }
+/** Remove a user-imported master and invalidate any stored screen assignments. */
+export function removeMaster(id) {
+  const index=ARTS.findIndex(a=>a.id===id)
+  if(index<0)return false
+  const removed=ARTS.splice(index,1)[0]
+  releaseEmbeddedVectors(removed);delete removed.U; delete removed.BG; removed.thumb=null
+  if(ST&&ST.mov)for(const key of Object.keys(ST.mov)){
+    const n=ST.mov[key]
+    if(n===index)delete ST.mov[key]
+    else if(typeof n==='number'&&n>index)ST.mov[key]=n-1
+  }
+  ACT=ARTS.length?Math.min(index,ARTS.length-1):-1
+  ART=ACT>=0?ARTS[ACT]:{a:null,an:null}
+  return true
+}
 export function masterFor(screen, row) {
+  if(row&&!ARTS.some(a=>a.lang===row.lang))return null
   const i = masterIdx(screen, row)
   return i >= 0 ? ARTS[i] : null
 }
 export function renderTile(row, screen, maxW, maxH) {
   return tileCanvas(row, screen, maxW, maxH)
 }
-export function renderFull(row, screen) {
-  const c = document.createElement('canvas')
-  c.width = screen.w
-  c.height = screen.h
-  draw(c.getContext('2d'), row, screen)
+export async function renderFull(row, screen) {
+  const master=masterFor(screen,row)
+  if(!master)throw new Error('No '+row.lang+' master is assigned. Import or assign a matching master.')
+  if(!calibrationReady(master))throw new Error('Approve all five calibration guides before batch export.')
+  await prepareVectorLayout(master,screen,master.calibration?.proofs?.[layoutFamily(screen)])
+  const c=document.createElement('canvas');c.width=screen.w;c.height=screen.h
+  master.requireVector=true
+  try{draw(c.getContext('2d'),row,screen)}finally{delete master.requireVector}
   return c
 }
 export function artLang(entry) {
   return entry && entry.lang ? entry.lang : ''
+}
+
+export async function prepareVectorLayout(art,screen,proof,pixelScale=1,pixelScaleY=pixelScale){
+  art.VR=art.VR||new Map()
+  const sources=allLayers(art)
+  for(const unit of guideLayout(art,screen,proof))for(const layer of sources.filter(l=>unit.layerIds.includes(l.id)&&l.vectorWord)){
+    const w=unit.frame.w*screen.w*pixelScale,h=unit.frame.h*screen.h*pixelScaleY,key=vectorRasterKey(layer,unit.box,w,h)
+    if(!art.VR.has(key)){const canvas=await renderVectorCrop(layer,unit.box,w,h);if(art.VR.size>=128)art.VR.delete(art.VR.keys().next().value);art.VR.set(key,canvas)}
+  }
+}
+function drawGuided(ctx,art,screen,proof){
+  const layout=guideLayout(art,screen,proof),issues=guideFindings(art,screen,layout),background=art.a.source?.format==='image'?null:bgInfo(art),sources=allLayers(art),current=proof || art.calibration?.proofs?.[layoutFamily(screen)];
+  const signature=sourceSignature(art);
+  if(art.GU?.signature!==signature)art.GU={signature,units:{}};
+  art.PA=art.PA||new Map();
+  let vectorWordsRendered=0;
+  function targetFor(id){const f=layout.find(u=>u.id===id)?.frame;if(f)return {x:f.x*screen.w,y:f.y*screen.h,w:f.w*screen.w,h:f.h*screen.h};if(id==='__background'&&background)return backgroundFrame(background.source,screen,current?.backgroundTransform);if(id==='__border')return borderGeometry(art,screen,layout,current);return {x:0,y:0,w:screen.w,h:screen.h};}
+  function paint(g,id,node){
+    if(id==='__background'){
+      if(background){const f=targetFor(id),style=layerStyle({...background.L,parentOpacity:current?.panel?1:background.L.parentOpacity},current?.layerStyles?.[id]),rawBox=art.backgroundRegion?backgroundCrop(art.backgroundRegion,background.L,art.a.w,art.a.h):null,box=rawBox||{x:background.L.box[0],y:background.L.box[1],w:background.L.box[2],h:background.L.box[3]},layer={...background.L,px:background.source,box:[box.x,box.y,box.w,box.h],sourceBox:[box.x,box.y,box.w,box.h],crop:null},source=preparedLayerSource(layer,box,node,art.PA)||background.source;
+        compositeDraw(g,t=>{t.save();clipPanelMask(t,node?.mask,f,screen);t.drawImage(source,f.x,f.y,f.w,f.h);t.restore()},style,f);
+      }return;
+    }
+    if(id==='__border'){
+      const f=targetFor(id);if(f){const bounds={x:f.x-f.thickness,y:f.y-f.thickness,w:f.w+2*f.thickness,h:f.h+2*f.thickness};let source=null;
+        if(node?.fx?.stroke?.enabled){source=document.createElement('canvas');source.width=Math.max(1,Math.ceil(bounds.w));source.height=Math.max(1,Math.ceil(bounds.h));const t=source.getContext('2d');t.translate(-bounds.x,-bounds.y);drawOriginalBorder(t,art,screen,layout,current);t.resetTransform();stylePixels(source,node.fill,node.fx);}
+        compositeDraw(g,t=>{t.save();clipPanelMask(t,node?.mask,f,screen);if(source)t.drawImage(source,bounds.x,bounds.y,bounds.w,bounds.h);else{t.globalAlpha*=node?.fill??1;drawOriginalBorder(t,art,screen,layout,current);}t.restore()},layerStyle(null,current?.layerStyles?.[id]),bounds);
+      }return;
+    }
+    const unit=layout.find(u=>u.id===id);if(!unit)return;
+    let source=art.GU.units[id];if(!source){if(id==='flattened')source=art.a.composite;else{source=document.createElement('canvas');source.width=Math.ceil(unit.box.w);source.height=Math.ceil(unit.box.h);const t=source.getContext('2d');t.translate(-unit.box.x,-unit.box.y);drawSourceLayers(t,sources.filter(l=>unit.layerIds.includes(l.id)),false,true);}art.GU.units[id]=source;}
+    const f=unit.frame,target=targetFor(id);
+    if(id==='flattened'){
+      const fake={id:'flattened',px:source,box:[0,0,source.width,source.height],fillOpacity:1},material=preparedLayerSource(fake,{x:0,y:0,w:source.width,h:source.height},node,art.PA)||source;
+      compositeDraw(g,t=>{t.save();clipPanelMask(t,node?.mask,target,screen);t.drawImage(material,target.x,target.y,target.w,target.h);t.restore()},layerStyle(null,current?.layerStyles?.flattened),target);
+    }else for(const layer of sources.filter(l=>unit.layerIds.includes(l.id)).reverse()){
+      const scale=Math.abs(g.getTransform().a),vector=layer.vectorWord&&art.VR?.get(vectorRasterKey(layer,unit.box,target.w*scale,target.h*Math.abs(g.getTransform().d)))
+      if(layer.vectorWord&&!vector&&art.requireVector)throw new Error('Vector source preparation is incomplete. Retry the export; no cached-pixel substitution was exported.')
+      if(vector){vectorWordsRendered++;let material=vector;if((node?.fill??1)!==1||node?.fx?.stroke?.enabled){material=document.createElement('canvas');material.width=vector.width;material.height=vector.height;material.getContext('2d').drawImage(vector,0,0);stylePixels(material,node?.fill??1,node?.fx?.stroke?{stroke:{...node.fx.stroke,width:node.fx.stroke.width*vector.width/unit.box.w}}:null)}const style=layerStyle({...layer,parentOpacity:current?.panel?1:layer.parentOpacity},current?.layerStyles?.[layer.id]||current?.layerStyles?.[layer.wordSourceId]);compositeDraw(g,t=>{t.save();clipPanelMask(t,node?.mask,target,screen);t.drawImage(material,target.x,target.y,target.w,target.h);t.restore()},style,target);continue}
+
+      const style=layerStyle({...layer,parentOpacity:current?.panel?1:layer.parentOpacity},current?.layerStyles?.[layer.id]||current?.layerStyles?.[layer.wordSourceId]),material=preparedLayerSource(layer,unit.box,node,art.PA);
+      compositeDraw(g,t=>{t.save();clipPanelMask(t,node?.mask,target,screen);if(material)t.drawImage(material,target.x,target.y,target.w,target.h);else{t.translate(target.x,target.y);t.scale(target.w/unit.box.w,target.h/unit.box.h);t.translate(-unit.box.x,-unit.box.y);t.beginPath();t.rect(unit.box.x,unit.box.y,unit.box.w,unit.box.h);t.clip();drawSourceLayers(t,[layer],false,true);}t.restore()},style,target);
+    }
+  }
+  if(current?.panel)paintPanelTree(ctx,current.panel,screen,node=>targetFor(node.id),(g,node)=>paint(g,node.id,node));
+  else for(const id of artworkStack(art,screen,current).slice().reverse())paint(ctx,id,null);
+  return {layout,issues,vectorWordsRendered,PXMODE:'designer-calibrated '+screen.w+' × '+screen.h};
+}
+export function renderCalibration(art,screen,maxW,maxH,proof){
+  const scale=Math.min(maxW/screen.w,maxH/screen.h),c=document.createElement('canvas'),dpr=Math.min(window.devicePixelRatio||1,2);
+  c.width=Math.max(1,Math.round(screen.w*scale*dpr));c.height=Math.max(1,Math.round(screen.h*scale*dpr));
+  c.style.width='100%';c.style.height='100%';
+  const ctx=c.getContext('2d');ctx.scale(c.width/screen.w,c.height/screen.h);
+  const result={c,...drawGuided(ctx,art,screen,proof),ready:prepareVectorLayout(art,screen,proof,c.width/screen.w,c.height/screen.h).then(()=>{ctx.clearRect(0,0,screen.w,screen.h);const rendered=drawGuided(ctx,art,screen,proof);c.dataset.vectorReady='true';c.dataset.vectorWords=String(rendered.vectorWordsRendered)})};
+  return result;
+}
+
+export function backgroundBounds(art,screen,proof){
+  const bg=bgInfo(art);return bg?backgroundFrame(bg.source,screen,proof?.backgroundTransform):null;
+}
+export function artworkStack(art,screen,proof){
+  const layout=guideLayout(art,screen,proof);
+  if(proof?.panel)return panelOrder(proof.panel).filter(id=>effectiveVisible(proof.panel,id));
+  return materialStackOrder([...layout.map(u=>u.id),...(art.originalBorder?['__border']:[]),...(bgInfo(art)&&art.a.source?.format!=='image'?['__background']:[])],proof?.layerOrder);
+}
+export function pickArtwork(art,screen,proof,x,y,pixelScale=1,pixelScaleY=pixelScale){
+  const layout=guideLayout(art,screen,proof),bg=bgInfo(art),b=borderGeometry(art,screen,layout,proof),px=x*screen.w,py=y*screen.h;
+  for(const id of artworkStack(art,screen,proof)){
+    const node=proof?.panel?.nodes.find(n=>n.id===id),target=layout.find(u=>u.id===id)?.frame || (id==='__border'&&b?{x:b.x/screen.w,y:b.y/screen.h,w:b.w/screen.w,h:b.h/screen.h}:{x:0,y:0,w:1,h:1});
+    if(node){if(node.opacity===0||ancestors(proof.panel,id).some(parent=>parent.opacity===0)||node.empty||node.type==='adjustment'||node.fill===0&&!node.fx?.stroke?.enabled)continue;if(node.mask?.enabled&&node.mask.kind==='path'){const r=node.mask.linked||!node.mask.canvasRect?{x:target.x+(node.mask.rect?.x||0)*target.w,y:target.y+(node.mask.rect?.y||0)*target.h,w:(node.mask.rect?.w??1)*target.w,h:(node.mask.rect?.h??1)*target.h}:node.mask.canvasRect;if(x<r.x||y<r.y||x>r.x+r.w||y>r.y+r.h)continue;}}
+
+    if(id==='__background'){
+      if(!bg || layerStyle(bg.L,proof?.layerStyles?.[id]).opacity===0)continue;const f=backgroundFrame(bg.source,screen,proof?.backgroundTransform),u=(px-f.x)/f.w,v=(py-f.y)/f.h;
+      if(u>=0&&u<1&&v>=0&&v<1&&bg.source.getContext('2d').getImageData(Math.floor(u*bg.source.width),Math.floor(v*bg.source.height),1,1).data[3]>16)return {type:'background'};
+      continue;
+    }
+    if(id==='__border'){
+      if(layerStyle(null,proof?.layerStyles?.[id]).opacity===0)continue;
+      if(b){const t=Math.max(b.thickness/2,4);if(px>=b.x-t&&px<=b.x+b.w+t&&py>=b.y-t&&py<=b.y+b.h+t&&(Math.abs(px-b.x)<=t||Math.abs(px-b.x-b.w)<=t||Math.abs(py-b.y)<=t||Math.abs(py-b.y-b.h)<=t))return {type:'border'};}continue;
+    }
+    const unit=layout.find(u=>u.id===id);if(!unit)continue;
+    if(unit.id==='flattened' && layerStyle(null,proof?.layerStyles?.flattened).opacity===0)continue;
+    if(unit.layerIds.length && !allLayers(art).filter(l=>unit.layerIds.includes(l.id)).some(l=>layerStyle(l,proof?.layerStyles?.[l.id] || proof?.layerStyles?.[l.wordSourceId]).opacity>0))continue;
+    if(pickForeground([unit],x,y,(_unit,u,v)=>{
+      if(unit.id==='flattened'){const source=art.GU?.units?.[id];return source?source.getContext('2d').getImageData(Math.min(source.width-1,Math.floor(u*source.width)),Math.min(source.height-1,Math.floor(v*source.height)),1,1).data[3]*layerStyle(null,proof?.layerStyles?.flattened).opacity:0;}
+      const sx=unit.box.x+u*unit.box.w,sy=unit.box.y+v*unit.box.h;
+      let alpha=0;
+      for(const layer of allLayers(art).filter(l=>unit.layerIds.includes(l.id))){
+        const vector=layer.vectorWord&&art.VR?.get(vectorRasterKey(layer,unit.box,unit.frame.w*screen.w*pixelScale,unit.frame.h*screen.h*pixelScaleY));if(vector){const opacity=layerStyle(layer,proof?.layerStyles?.[layer.id]||proof?.layerStyles?.[layer.wordSourceId]).opacity;alpha=Math.max(alpha,vector.getContext('2d').getImageData(Math.min(vector.width-1,Math.floor(u*vector.width)),Math.min(vector.height-1,Math.floor(v*vector.height)),1,1).data[3]*opacity);continue}
+        const [lx,ly,lw,lh]=layer.sourceBox || layer.box,c=layer.crop;
+        if(c&&(sx<c.x||sy<c.y||sx>=c.x+c.w||sy>=c.y+c.h))continue;
+        const px=Math.floor((sx-lx)/lw*layer.px.width),py=Math.floor((sy-ly)/lh*layer.px.height);
+        if(px<0||py<0||px>=layer.px.width||py>=layer.px.height)continue;
+        const opacity=layerStyle(layer,proof?.layerStyles?.[layer.id] || proof?.layerStyles?.[layer.wordSourceId]).opacity;
+        alpha=Math.max(alpha,layer.px.getContext('2d').getImageData(px,py,1,1).data[3]*opacity);
+      }
+      return alpha;
+    }))return {type:'foreground',id};
+  }
+  return null;
 }
