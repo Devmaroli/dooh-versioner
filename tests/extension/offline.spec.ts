@@ -71,7 +71,7 @@ test('private IKEA embedded Illustrator words render offline under the extension
     const page = await context.newPage(), errors: string[] = [], requests: string[] = []; page.on('pageerror', error => errors.push(error.message)); page.on('request', request => { if (/^https?:/.test(request.url())) requests.push(request.url()) })
     await page.goto(`chrome-extension://${id}/index.html`); await expect(page.getByText('Saved on this device')).toBeVisible()
     await page.locator('input[type=file]').setInputFiles(fixture!); await page.getByLabel('Language for ikea.psd').selectOption('EN'); await onlyMupi(page)
-    await page.getByRole('button', { name: 'Continue to Analyse' }).click(); await page.locator('.analyse-layer').nth(6).click(); await page.getByRole('button', { name: 'Main headline', exact: true }).click()
+    await page.getByRole('button', { name: 'Continue to Analyse' }).click(); await page.locator('button.lp-name', { hasText: /^Vector Smart Object$/ }).click(); await page.getByRole('button', { name: 'Main headline', exact: true }).click()
     await page.getByRole('button', { name: /3 · Adapt/ }).click(); await page.getByRole('button', { name: 'Edit Alshaheed - Mupi', exact: true }).click(); await page.getByRole('button', { name: 'Prepare headline words', exact: true }).click()
     await expect(page.locator('.lp-row').filter({ hasText: /Word [0-9]+ · embedded vector/ })).toHaveCount(5)
     await expect(page.locator('.calibration-canvas-frame .proof-canvas canvas')).toHaveAttribute('data-vector-words', '5'); await expect(page.getByRole('alert')).toHaveCount(0)
