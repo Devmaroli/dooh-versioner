@@ -1,0 +1,48 @@
+[
+  {
+    "revision": "2970aa871cc1001b57b267ccecdcd1e42306199e",
+    "files": [
+      "LICENSE-APACHE",
+      "LICENSE-MIT"
+    ],
+    "name": "wasmi",
+    "repository": "wasmi-labs/wasmi"
+  },
+  {
+    "revision": "2970aa871cc1001b57b267ccecdcd1e42306199e",
+    "files": [
+      "LICENSE-APACHE",
+      "LICENSE-MIT"
+    ],
+    "name": "wasmi_collections",
+    "repository": "wasmi-labs/wasmi"
+  },
+  {
+    "revision": "2970aa871cc1001b57b267ccecdcd1e42306199e",
+    "files": [
+      "LICENSE-APACHE",
+      "LICENSE-MIT"
+    ],
+    "name": "wasmi_core",
+    "repository": "wasmi-labs/wasmi"
+  },
+  {
+    "revision": "2970aa871cc1001b57b267ccecdcd1e42306199e",
+    "files": [
+      "LICENSE-APACHE",
+      "LICENSE-MIT"
+    ],
+    "name": "wasmi_ir",
+    "repository": "wasmi-labs/wasmi"
+  },
+  {
+    "revision": "e66235859a6ec0502bf6f9dcc358953eda4cafcc",
+    "files": [
+      "LICENSE-APACHE",
+      "LICENSE-Apache-2.0_WITH_LLVM-exception",
+      "LICENSE-MIT"
+    ],
+    "name": "wasmparser",
+    "repository": "bytecodealliance/wasm-tools"
+  }
+]

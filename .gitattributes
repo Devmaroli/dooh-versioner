@@ -1,0 +1,6 @@
+# Preserve third-party notices and generated bindings as supplied.
+src/vendor/vectorcraft/licenses/** -text -whitespace
+src/vendor/vectorcraft/LICENSE-* -text -whitespace
+src/vendor/vectorcraft/NOTICE -text -whitespace
+src/vendor/vectorcraft/vectorcraft_svg.js -text -whitespace
+src/vendor/vectorcraft/*.bin -text

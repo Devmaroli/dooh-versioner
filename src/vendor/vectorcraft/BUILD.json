@@ -1,0 +1,13 @@
+{
+  "upstream": "https://github.com/storytold/vectorcraft",
+  "revision": "1bb52c5b3897d30c1ed8032df56ea22372c8f145",
+  "rust": "1.99.1",
+  "wasm-bindgen": "0.2.130",
+  "features": [
+    "svg"
+  ],
+  "rawBytes": 10932756,
+  "gzipBytes": 3465368,
+  "rawSha256": "85d13a9cf9b8c0ec9087c55f08da3ca81f4ac6dfda5f8546f5dc499426f758e5",
+  "gzipSha256": "ddccb4e69b1a8d13565cbfeeccb937e5dd99d8dd1843fda2bea526955353d56c"
+}
