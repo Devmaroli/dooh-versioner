@@ -1,8 +1,7 @@
 import { allLayers, unlinkLayers } from './artwork.js'
 import { detectSourceBorder, borderInterior } from './border.js'
-import { splitSourceWords } from './words.js'
+import { splitSourceWords, splitSourceParts } from './words.js'
 import { invalidateBackground } from './background.js'
-import { splitSubpaths } from './svgDocument.js'
 
 export function prepareSourceText(art, id, action) {
   const layer = allLayers(art).find(l => l.id === id)
@@ -44,30 +43,17 @@ export function prepareAnyLayer(art, id) {
   if (layer?.children?.length) throw new Error('Prepare a layer inside the group. A folder is not flattened into new artwork.')
   if (!layer?.px || layer.wordSourceId || layer.splitIntoWords) throw new Error('Select one original layer. Existing split pieces stay as they are.')
   if (layer.logoProtected && art.layerConstraints?.[id]?.allowSplit !== true) throw new Error('This logo is protected. Allow split on this layer before separating it.')
-  if (layer.pathData) {
-    const parts = splitSubpaths(layer.pathData)
-    if (parts.length < 2) throw new Error('This vector is a single path. Nothing was split and no paths were invented.')
-    const pieces = parts.map((pathData, index) => ({ id: crypto.randomUUID(), name: `Path ${index + 1} · vector`, kind: 'shape', pathData, box: layer.box, sourceKind: 'svg-path', fill: layer.fill, opacity: 1 }))
-    layer.children = pieces
-    layer.kind = 'group'
-    layer.sourceKind = 'svg-group'
-    const group = { id: crypto.randomUUID(), name: `${layer.name || 'Vector'} split`, layerIds: pieces.map(piece => piece.id), source: 'vector' }
-    art.preparationGroups = [...(art.preparationGroups || []), group]
-    invalidateBackground(art)
-    return { message: `Split ${pieces.length} vector paths from the existing path data into separate layers. No paths were invented.`, pieces, group }
-  }
-  const verifiedVector = !!layer.vectorPdf
-  const pieces = splitSourceWords(layer).map((crop, index) => ({
-    id: crypto.randomUUID(), parentId: id, vector: verifiedVector,
-    name: verifiedVector ? `Part ${index + 1} · embedded vector` : `Part ${index + 1} · raster`,
-    crop,
+  const verifiedVector = !!(layer.vectorPdf || layer.svgShape)
+  const pieces = splitSourceParts({ ...layer, logoProtected: false }).map((part, index) => ({
+    ...part, id: crypto.randomUUID(), parentId: id, vector: verifiedVector,
+    name: `${part.isBorder ? 'Border' : 'Part'} ${index + 1} · ${verifiedVector ? 'embedded vector' : 'raster'}`,
   }))
   const group = { id: crypto.randomUUID(), name: `${layer.name || 'Layer'} split`, layerIds: pieces.map(piece => piece.id), source: verifiedVector ? 'vector' : 'raster' }
   art.wordPieces = [...(art.wordPieces || []), ...pieces]
   art.preparationGroups = [...(art.preparationGroups || []), group]
   const role = art.an.roles.find(item => item.id === id)?.role || 'other'
   for (const piece of pieces) {
-    art.an.roles.push({ id: piece.id, role, confidence: 1, why: verifiedVector ? 'Split from a verified embedded vector source' : 'Raster source-pixel separation. No paths were invented.' })
+    art.an.roles.push({ id: piece.id, role: piece.isBorder ? 'border' : role, confidence: 1, why: verifiedVector ? 'Split from a verified embedded vector source' : 'Raster source-pixel separation. No paths were invented.' })
     art.layerConstraints = { ...art.layerConstraints, [piece.id]: { required: false, anchor: 'free', orientation: 'preserve' } }
   }
   art.layerLinks = unlinkLayers(art.layerLinks || [], [id])

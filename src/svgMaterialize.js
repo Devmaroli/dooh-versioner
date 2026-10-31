@@ -99,7 +99,7 @@ export function placeRaster(source, layer) {
   return canvas
 }
 
-export async function rasterizeSvgLayer(layer) {
+export async function rasterizeSvgLayer(layer, outputSize) {
   if (typeof document === 'undefined') return null
   if (layer.kind === 'text' && !layer.px) {
     if (!layer.editable) return null
@@ -118,10 +118,11 @@ export async function rasterizeSvgLayer(layer) {
   if (!(w > 0) || !(h > 0)) return null
   const canvas = document.createElement('canvas')
   const scale = Math.min(1, 1600 / Math.max(w, h))
-  canvas.width = Math.max(1, Math.ceil(w * scale))
-  canvas.height = Math.max(1, Math.ceil(h * scale))
+  canvas.width = Math.max(1, Math.ceil(outputSize?.width ?? w * scale))
+  canvas.height = Math.max(1, Math.ceil(outputSize?.height ?? h * scale))
   const context = canvas.getContext('2d')
-  context.setTransform(scale, 0, 0, scale, -x * scale, -y * scale)
+  context.setTransform(canvas.width/w, 0, 0, canvas.height/h, -x*canvas.width/w, -y*canvas.height/h)
+  if (layer.sourceClip) context.clip(new Path2D(layer.sourceClip))
   // Layer opacity is applied by the shared compositor, once.
   if (layer.clip?.d) { context.clip(new Path2D(layer.clip.d)) }
   else if (layer.clip?.rect) { const [cx, cy, cw, ch] = layer.clip.rect; context.beginPath(); context.rect(cx, cy, cw, ch); context.clip() }

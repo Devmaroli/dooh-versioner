@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.7.6 — 2026-11-01
+
+- Replace headline preparation with Split selected layer. Split the selected source without requiring a headline role or rectangular border detection; preserve source roles and create separate enclosing border/components and gap-separated parts.
+- Retain original SVG/PDF sources and non-destructive separation masks in previews, vector renders and project recovery. Touching or opaque artwork remains intact when no reliable separation exists.
+
+Validation: 106 unit tests, 26 synthetic browser tests and two offline MV3 tests passed; nine private browser cases and one private extension case skipped. Both typechecks and both builds passed. Synthetic SVG and embedded PDF checks cover nonrectangular coloured borders, isolated vector pixels, PSD layers, role preservation, undo/redo and recovery.
+
 ## 1.7.5 — 2026-11-01
 
 - Move Analyse’s Manage files and Next step actions beside the heading, remove the bottom summary cards, and let the canvas and rails fill the remaining viewport.
