@@ -1,6 +1,8 @@
 # DOOH Creative Studio
 
-Version **1.6.0** provides the React six-stage workflow, source-layer analysis, selected-target layout guides, per-screen refinement with affine transforms, and lossless PNG/PDF or layered PSD export. The local Chrome extension uses the same editor without a server. Legacy prototype files remain for reference.
+Version **1.7.2** provides the React five-stage workflow (Import, Analyse, Adapt, Review & edit, Export), universal layer tagging, selected-target layout guides, one output editor, and lossless PNG/PDF or layered PSD export. The local Chrome extension uses the same editor without a server. Legacy prototype files remain for reference.
+
+See [studio UX and limitations](docs/studio-ux.md) for the tagging model, approval scope and what still depends on real production artwork.
 
 See [Chrome installation and IT handoff](docs/chrome-extension.md), [security review](docs/security-audit.md), [export formats and PSD limitations](docs/export-formats.md), [selected targets](docs/selected-targets.md), and [Free Transform](docs/free-transform.md).
 
@@ -25,11 +27,11 @@ Import PSD/PSB, SVG or raster masters, confirm their language and semantic roles
 
 ## Chrome extension
 
-Build the offline Manifest V3 package with `npm run build:extension`. Load the generated `dist-extension/` folder only where your organisation permits unpacked extensions; managed office deployment needs your IT-approved Chrome distribution route. The extension requests no browser/host permissions and opens the editor in a full tab. The toolbar icon uses the selected Adapt artwork, and v1.6.0 is visible in both the launcher and editor.
+Build the offline Manifest V3 package with `npm run build:extension`. Load the generated `dist-extension/` folder only where your organisation permits unpacked extensions; managed office deployment needs your IT-approved Chrome distribution route. The extension requests no browser/host permissions and opens the editor in a full tab. The toolbar icon uses the selected Adapt artwork, and v1.7.2 is visible in both the launcher and editor.
 
 ## Release information
 
-See [v1.6.0 release notes](CHANGELOG.md), the [implementation report](docs/implementation-report-1.6.0.md), and [security audit](docs/security-audit.md). Validation recorded for this release: 79 unit tests, 21 web browser tests, two extension-origin tests, production/extension builds and both typechecks. Full and production dependency scans reported zero known advisories on 2026-10-31. This is a bounded review, not an antivirus certification or a guarantee against unknown vulnerabilities.
+See [v1.7.2 release notes](CHANGELOG.md), [studio UX](docs/studio-ux.md), the [v1.6.0 implementation report](docs/implementation-report-1.6.0.md), and [security audit](docs/security-audit.md). The v1.6.0 validation note is historical. This build is not an antivirus certification or a guarantee against unknown vulnerabilities.
 
 PSD adaptations retain independent pixel layers and native blend/opacity; supported original native layers and embedded Illustrator objects are retained separately in a hidden source folder. PDF is a lossless flattened visual export. Review advanced Photoshop fidelity before production.
 

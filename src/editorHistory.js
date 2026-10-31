@@ -1,6 +1,6 @@
 import { invalidateBackground } from './background.js'
 
-const defaults = { layerConstraints: {}, backgroundRegion: null, layerVisibility: {}, layerLinks: [], layerCrops: {}, originalBorder: null, wordPieces: [], calibration: null }
+const defaults = { layerConstraints: {}, backgroundRegion: null, layerVisibility: {}, layerLinks: [], layerCrops: {}, originalBorder: null, wordPieces: [], calibration: null, layerPanel: null, groupExpanded: null, preparationGroups: null }
 const fields = Object.keys(defaults)
 export function editorSnapshot(art) {
   return structuredClone({ roles: art.an.roles, ...Object.fromEntries(fields.map(key => [key, art[key] ?? defaults[key]])) })
