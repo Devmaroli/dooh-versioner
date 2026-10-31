@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.7.4 — 2026-11-01
+
+- Increment the release version for the delivered VectorCraft SVG WASM update. Package metadata, extension manifest/launcher and runtime version now agree on 1.7.4.
+- Record the requirement to increment the version for each delivered change set. Extension checks read the manifest version so future release bumps do not leave stale test expectations.
+
 ## 1.7.3 — 2026-10-31
 
 - VectorCraft SVG WASM is now enabled after the size cutoff was waived. A local worker normalizes styled shapes through the pinned Rust SVG import/export API; JS retains source groups, editable paint metadata, verified fonts and relinkable images. The 10.93 MB module ships as a 3.47 MB local gzip asset in web and extension builds, with upstream and dependency licenses. Only `wasm-unsafe-eval` is added to the extension CSP; permissions remain empty. No CDN, font files or client artwork is bundled. WASM failures are visible and Rust warnings require review. PDF import is unchanged. See `docs/wasm-spike.md`.
