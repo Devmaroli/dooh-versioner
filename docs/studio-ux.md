@@ -27,6 +27,18 @@ Changing priority or inclusion does not change the role. Logos cannot be split i
 
 The full source layer is available, including pixels outside the artboard. The designer draws the reusable texture rectangle. The engine does not invent a fill when that region is unreliable; the finding stays on the output until someone reviews it.
 
+## Analyse columns
+
+At desktop widths the Analyse stage is three independently scrolling columns: roles and requirements on the left, the artwork in the centre, and the layer tree on the right. Below 1100px the role column moves above the artwork. Below 760px the columns stack.
+
+## Groups
+
+Imported PSD groups keep their nesting. A chevron shows collapsed at 0 degrees and expanded at 90 degrees, and it does not animate when reduced motion is requested. Open or closed state is stored on the group and survives refresh and undo. Hiding or locking a group hides or locks its children. Opacity multiplies down the group. Ctrl/Cmd+G groups the selection. Ctrl/Cmd+Shift+G ungroups. Collapsed children are omitted from Shift range selection. Hidden rows are omitted from that range unless the hidden row itself is clicked.
+
+## Prepare / split
+
+Prepare / split works on any selected layer. A verified embedded vector source is split into parts labelled as embedded vector and placed in a new group. A raster layer is split only where source-pixel gaps are reliable, and those parts are labelled raster. No paths are invented. A logo stays whole until Allow split is turned on.
+
 ## Editor
 
 Move (V), Free Transform (T, or the Scale control, and Ctrl/Cmd+T), Hand (H) and Zoom (Z). Properties and Layers are separate jump targets in the same inspector. The layer tree supports arrow keys. Thumbnails are compact, 100, 200 or 300. Blend mode and opacity stay distinct from fill. History keeps seven undo steps, scoped to the guide or the output.

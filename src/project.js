@@ -30,7 +30,7 @@ export function workflowStatus(step, assets, selectedCount) {
   return 'Not ready'
 }
 export function metadataFor(art) {
-  return { schemaVersion: 2, editorHistory: art.editorHistory || null, id: art.id, name: art.name, lang: art.lang, roles: art.an.roles, layerConstraints: art.layerConstraints || {}, backgroundRegion: art.backgroundRegion || null, layerVisibility: art.layerVisibility || {}, layerLinks: art.layerLinks || [], previewSettings: art.previewSettings || {}, calibration: art.calibration || null, originalBorder: art.originalBorder || null, layerCrops: art.layerCrops || {}, wordPieces: art.wordPieces || [], exportAcknowledgement: art.exportAcknowledgement || null }
+  return { schemaVersion: 2, editorHistory: art.editorHistory || null, id: art.id, name: art.name, lang: art.lang, roles: art.an.roles, layerConstraints: art.layerConstraints || {}, backgroundRegion: art.backgroundRegion || null, layerVisibility: art.layerVisibility || {}, layerLinks: art.layerLinks || [], previewSettings: art.previewSettings || {}, calibration: art.calibration || null, originalBorder: art.originalBorder || null, layerCrops: art.layerCrops || {}, wordPieces: art.wordPieces || [], exportAcknowledgement: art.exportAcknowledgement || null, layerPanel: art.layerPanel || null, groupExpanded: art.groupExpanded || null, preparationGroups: art.preparationGroups || null }
 }
 export function restoreMetadata(art, metadata) {
   const saved = migrateMetadata(metadata)
@@ -47,6 +47,9 @@ export function restoreMetadata(art, metadata) {
   art.layerCrops = saved.layerCrops || {}
   art.wordPieces = saved.wordPieces || []
   art.exportAcknowledgement = saved.exportAcknowledgement || null
+  art.layerPanel = saved.layerPanel || null
+  art.groupExpanded = saved.groupExpanded || null
+  art.preparationGroups = saved.preparationGroups || null
   const ids = new Set([...art.an.roles.map(r => r.id), ...art.wordPieces.map(p => p.id)])
   // Re-run automatic suggestions on recovery; only designer/source-confirmed roles override them.
   for (const role of saved.roles.filter(r => ids.has(r.id) && (r.confidence === 1 || r.confirmed))) {

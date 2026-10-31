@@ -1,4 +1,5 @@
 import { expect, test } from 'vitest'
+import { prepareAnyLayer } from '../../sourceText.js'
 import { canonicalRole, migrateMetadata, mixedValue, patchConstraints, readinessStatus, roleLabel } from '../../tagging.js'
 import { metadataFor, restoreMetadata } from '../../project.js'
 import { GUIDE_PRESETS, initialProof, layoutFamily, outputReadiness } from '../../layoutGuides.js'
@@ -52,4 +53,14 @@ test('readiness distinguishes blocked, review-only and ready outputs', () => {
   Object.defineProperty(layers[0], 'px', { value: {} })
   const art = { a: { w: 200, h: 100, source: { format: 'psd' }, layers }, an: { roles: [{ id: 'h', role: 'legal', confidence: 1 }] }, layerConstraints: {}, calibration: { enabled: false, proofs: {} } }
   expect(outputReadiness(art, { name: 'Mupi', w: 1080, h: 1920 }).status).toBe('Blocked')
+})
+
+test('a protected logo cannot be split until the designer allows it, and a folder is not flattened', () => {
+  const logo = { id: 'mark', name: 'Logo', box: [0, 0, 20, 10] }
+  Object.defineProperty(logo, 'px', { value: {} })
+  const art = { a: { layers: [logo] }, an: { roles: [{ id: 'mark', role: 'logo', confidence: 1 }] }, layerConstraints: {} }
+  expect(() => prepareAnyLayer(art, 'mark')).toThrow(/protected/)
+  art.layerConstraints.mark = { allowSplit: true }
+  const folder = { id: 'folder', name: 'Folder', children: [logo] }
+  expect(() => prepareAnyLayer({ ...art, a: { layers: [folder] } }, 'folder')).toThrow(/folder/i)
 })

@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { BLEND_GROUPS, blendLabel } from './blending.js'
-import { LayerPanelState, LayerPanelAction, LayerRecord, orderedNodes, ancestors, effectiveLocks, selectPanelLayers, moveTreeFocus, unlocked } from './layerPanelModel'
+import { LayerPanelState, LayerPanelAction, LayerRecord, orderedNodes, ancestors, descendants, effectiveLocks, selectPanelLayers, moveTreeFocus, unlocked } from './layerPanelModel'
+import { roleLabel } from './tagging.js'
 import './layersPanel.css'
 
 const paths: Record<string, string> = {
@@ -14,6 +15,7 @@ const paths: Record<string, string> = {
   mask: 'M3 4h18v16H3zM16 12a4 4 0 1 1-8 0 4 4 0 0 1 8 0',
   adjustment: 'M12 3a9 9 0 1 0 0 18V3zM12 3a9 9 0 0 1 0 18',
   group: 'M2 6h8l2 3h10v12H2zM2 6V3h8l2 3',
+  chevron: 'M9 5l7 7-7 7',
   new: 'M5 2h10l5 5v15H5zM15 2v6h5M9 14h7M12.5 10.5v7',
   delete: 'M3 6h18M8 6V3h8v3M5 6l1 16h12l1-16M10 10v8M14 10v8',
 }
@@ -22,11 +24,12 @@ type Props = {
   state: LayerPanelState; selected: string[]; onSelect: (ids: string[]) => void; onAction: (action: LayerPanelAction, label: string) => void
   renderThumbnail: (layer: LayerRecord) => React.ReactNode; thumbnailSize: 48 | 100 | 200 | 300; onThumbnailSize: (size: 48 | 100 | 200 | 300) => void
   preparation?: { label:string; disabled:boolean; run:()=>void; status:string }; onResetAppearance: () => void; onLink: () => void; canLink: boolean; linked: boolean
+  rowClassName?: string; eyeLabel?: (layer: LayerRecord, index: number) => string
 }
 
-export function LayersPanel({ state, selected, onSelect, onAction, renderThumbnail, thumbnailSize, onThumbnailSize, onLink, canLink, linked, onResetAppearance, preparation }: Props) {
+export function LayersPanel({ state, selected, onSelect, onAction, renderThumbnail, thumbnailSize, onThumbnailSize, onLink, canLink, linked, onResetAppearance, preparation, rowClassName = '', eyeLabel }: Props) {
   const [filterBy, setFilterBy] = useState('name'), [query, setQuery] = useState(''), [kind, setKind] = useState('all')
-  const [collapsed, setCollapsed] = useState<string[]>([]), [editing, setEditing] = useState<string | null>(null), [draft, setDraft] = useState('')
+  const [editing, setEditing] = useState<string | null>(null), [draft, setDraft] = useState('')
   const [inspector, setInspector] = useState<'fx' | 'mask' | null>(null), [message, setMessage] = useState(''), [drop, setDrop] = useState<{ id: string; placement: 'before' | 'after' | 'inside' } | null>(null)
   const anchor = useRef<string | null>(null), drag = useRef<string[]>([]), list = useRef<HTMLDivElement>(null)
   const picked = state.nodes.filter(n => !n.deleted && selected.includes(n.id)), locks = picked.map(n => effectiveLocks(state, n.id))
@@ -37,15 +40,21 @@ export function LayersPanel({ state, selected, onSelect, onAction, renderThumbna
   const allRows = orderedNodes(state)
   const filtering = filterBy === 'name' ? !!query.trim() : kind !== 'all'
   const matches = allRows.filter(({ layer }) => filterBy === 'name' ? layer.name.toLowerCase().includes(query.toLowerCase()) : kind === 'all' || layer.type === kind).map(r => r.layer.id)
+  const collapsed = state.nodes.filter(node => node.type === 'group' && node.expanded === false).map(node => node.id)
   const rows = allRows.filter(({ layer }) => filtering ? matches.includes(layer.id) || matches.some(id => ancestors(state,id).some(p => p.id === layer.id)) : !ancestors(state,layer.id).some(p => collapsed.includes(p.id)))
   useEffect(()=>{
     const id=selected[0];if(!id)return;if(selected.length===1)anchor.current=id
-    const parents=ancestors(state,id).map(n=>n.id),hidden=collapsed.filter(x=>!parents.includes(x));if(hidden.length!==collapsed.length){setCollapsed(hidden);return}
+    const parents=ancestors(state,id).map(n=>n.id),closed=collapsed.filter(item=>!parents.includes(item));if(closed.length){setExpanded(closed,true);return}
     const row=list.current?.querySelector<HTMLElement>(`[data-layer-id="${CSS.escape(id)}"]`)
     if(row&&list.current){const box=row.getBoundingClientRect(),area=list.current.getBoundingClientRect();if(box.top<area.top)list.current.scrollTop-=area.top-box.top;else if(box.bottom>area.bottom)list.current.scrollTop+=box.bottom-area.bottom}
   },[selected.join('|'),collapsed.join('|')])
   const patch = (changes: Partial<LayerRecord>, label: string) => onAction({ type: 'patch', ids: selected, patch: changes }, label)
-  function select(id: string, e: { shiftKey?: boolean; ctrlKey?: boolean; metaKey?: boolean }) { onSelect(selectPanelLayers(selected,id,rows.map(r => r.layer.id),anchor.current,e)); if (!e.shiftKey) anchor.current = id }
+  function select(id: string, e: { shiftKey?: boolean; ctrlKey?: boolean; metaKey?: boolean }) {
+    const hidden = new Set(rows.filter(row => row.layer.visible === false).map(row => row.layer.id))
+    const order = rows.map(row => row.layer.id).filter(item => !hidden.has(item) || item === id)
+    onSelect(selectPanelLayers(selected,id,order,anchor.current,e)); if (!e.shiftKey) anchor.current = id
+  }
+  function setExpanded(ids: string[], expanded: boolean) { onAction({ type: 'patch', ids, patch: { expanded } }, expanded ? 'Expand group' : 'Collapse group') }
   function rename(layer: LayerRecord) { if (effectiveLocks(state,layer.id).all) return; setEditing(layer.id); setDraft(layer.name) }
   function finishRename() { if (editing && draft.trim()) onAction({ type: 'patch', ids: [editing], patch: { name: draft.trim() } }, 'Rename layer'); setEditing(null) }
   function create(type: 'pixel' | 'adjustment') {
@@ -71,21 +80,36 @@ export function LayersPanel({ state, selected, onSelect, onAction, renderThumbna
     <div className="lp-order"><button type="button" disabled={!selectedLayer||siblingIndex<=0||locks.some(l=>l.all)} onClick={()=>stepLayer(-1)}>Move layer up</button><button type="button" disabled={!selectedLayer||siblingIndex>=siblings.length-1||locks.some(l=>l.all)} onClick={()=>stepLayer(1)}>Move layer down</button><small>Drag rows to reorder or move into a folder.</small></div>
     <div className="lp-list editor-layer-list" ref={list} role="tree" aria-label="Layout layers" aria-multiselectable="true" onKeyDown={event => {
       if (event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement) return
+      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'g') {
+        event.preventDefault()
+        if (event.shiftKey) onAction({ type: 'ungroup', ids: selected }, 'Ungroup')
+        else if (selected.length) { const id = crypto.randomUUID(); onAction({ type: 'group', ids: selected, id }, 'Create group'); onSelect([id]) }
+        return
+      }
       const order = rows.map(row => row.layer.id)
       const next = moveTreeFocus(order, selected[0], event.key)
-      if (next && next !== selected[0]) { event.preventDefault(); onSelect([next]); anchor.current = next; return }
+      if ((event.key === 'ArrowDown' || event.key === 'ArrowUp' || event.key === 'Home' || event.key === 'End') && next && next !== selected[0]) { event.preventDefault(); onSelect([next]); anchor.current = next; return }
       const current = rows.find(row => row.layer.id === selected[0])
-      if (event.key === 'ArrowRight' && current?.layer.type === 'group') { event.preventDefault(); setCollapsed(collapsed.filter(id => id !== current.layer.id)) }
-      if (event.key === 'ArrowLeft' && current?.layer.type === 'group') { event.preventDefault(); setCollapsed(ids => ids.includes(current.layer.id) ? ids : [...ids, current.layer.id]) }
+      if (event.key === 'ArrowRight' && current) {
+        event.preventDefault()
+        if (current.layer.type === 'group' && current.layer.expanded === false) setExpanded([current.layer.id], true)
+        else if (current.layer.type === 'group') { const child = state.nodes.find(node => !node.deleted && node.parentId === current.layer.id); if (child) { onSelect([child.id]); anchor.current = child.id } }
+      }
+      if (event.key === 'ArrowLeft' && current) {
+        event.preventDefault()
+        if (current.layer.type === 'group' && current.layer.expanded !== false) setExpanded([current.layer.id], false)
+        else if (current.layer.parentId) { onSelect([current.layer.parentId]); anchor.current = current.layer.parentId }
+      }
     }}>
       {rows.map(({layer,depth}) => {
         const locked = effectiveLocks(state,layer.id), hasChildren = state.nodes.some(n=>!n.deleted&&n.parentId===layer.id), isSelected=selected.includes(layer.id)
-        return <div key={layer.id} role="treeitem" tabIndex={isSelected || (!selected.length && layer.id === rows[0]?.layer.id) ? 0 : -1} aria-level={depth+1} aria-selected={isSelected} aria-expanded={layer.type==='group' ? !collapsed.includes(layer.id) : undefined} data-layer-id={layer.id} className={`lp-row editor-layer-row ${isSelected?'selected':''} ${thumbnailSize>100?'large-thumbnail':''}`} data-drop={drop?.id===layer.id?drop.placement:undefined} style={{'--layer-depth':depth} as React.CSSProperties} onClick={e=>{if(!(e.target as HTMLElement).closest('button,input,summary,details'))select(layer.id,e)}} draggable={!locked.all&&editing!==layer.id} onDragStart={e=>{drag.current=isSelected?selected:[layer.id];e.dataTransfer.setData('text/plain',drag.current.join(','));e.dataTransfer.effectAllowed='move'}} onDragOver={e=>{e.preventDefault();const b=e.currentTarget.getBoundingClientRect(),y=(e.clientY-b.top)/b.height;setDrop({id:layer.id,placement:layer.type==='group'&&y>.25&&y<.75?'inside':y<.5?'before':'after'});const area=list.current?.getBoundingClientRect();if(area&&list.current){if(e.clientY<area.top+28)list.current.scrollTop-=12;if(e.clientY>area.bottom-28)list.current.scrollTop+=12}}} onDragLeave={e=>{if(!e.currentTarget.contains(e.relatedTarget as Node))setDrop(null)}} onDrop={e=>{e.preventDefault();if(drop)onAction({type:'move',ids:drag.current,target:drop.id,placement:drop.placement},'Reorder layer tree');setDrop(null)}} onDragEnd={()=>setDrop(null)}>
-          <button type="button" className="lp-eye" aria-label={`${layer.visible?'Hide':'Show'} layer ${layer.name}`} title={layer.visible?'Hide layer':'Show layer'} disabled={locked.all} onClick={()=>onAction({type:'patch',ids:[layer.id],patch:{visible:!layer.visible}},'Toggle layer visibility')}><Icon name="eye" />{!layer.visible&&<span className="lp-eye-slash" />}</button>
+        const open = layer.expanded !== false
+        return <div key={layer.id} role="treeitem" tabIndex={isSelected || (!selected.length && layer.id === rows[0]?.layer.id) ? 0 : -1} aria-level={depth+1} aria-selected={isSelected} aria-expanded={layer.type==='group' ? open : undefined} data-layer-id={layer.id} className={`lp-row editor-layer-row ${rowClassName} ${isSelected?'selected':''} ${thumbnailSize>100?'large-thumbnail':''}`} data-drop={drop?.id===layer.id?drop.placement:undefined} style={{'--layer-depth':depth} as React.CSSProperties} onClick={e=>{if(!(e.target as HTMLElement).closest('button,input,summary,details'))select(layer.id,e)}} draggable={!locked.all&&editing!==layer.id} onDragStart={e=>{drag.current=isSelected?selected:[layer.id];e.dataTransfer.setData('text/plain',drag.current.join(','));e.dataTransfer.effectAllowed='move'}} onDragOver={e=>{e.preventDefault();const b=e.currentTarget.getBoundingClientRect(),y=(e.clientY-b.top)/b.height;setDrop({id:layer.id,placement:layer.type==='group'&&y>.25&&y<.75?'inside':y<.5?'before':'after'});const area=list.current?.getBoundingClientRect();if(area&&list.current){if(e.clientY<area.top+28)list.current.scrollTop-=12;if(e.clientY>area.bottom-28)list.current.scrollTop+=12}}} onDragLeave={e=>{if(!e.currentTarget.contains(e.relatedTarget as Node))setDrop(null)}} onDrop={e=>{e.preventDefault();if(drop)onAction({type:'move',ids:drag.current,target:drop.id,placement:drop.placement},'Reorder layer tree');setDrop(null)}} onDragEnd={()=>setDrop(null)}>
+          <button type="button" className="lp-eye" aria-label={`${layer.visible?'Hide':'Show'} layer ${eyeLabel ? eyeLabel(layer, rows.indexOf(rows.find(row => row.layer.id === layer.id)!)) : layer.name}`} title={layer.visible?'Hide layer':'Show layer'} disabled={locked.all} onClick={()=>onAction({type:'patch',ids:[layer.id],patch:{visible:!layer.visible}},'Toggle layer visibility')}><Icon name="eye" />{!layer.visible&&<span className="lp-eye-slash" />}</button>
           <input type="checkbox" aria-label={`Select element ${layer.name}`} checked={isSelected} onChange={()=>{}} onClick={e=>{e.stopPropagation();select(layer.id,{...e,ctrlKey:!e.shiftKey||e.ctrlKey||e.metaKey})}} />
           <button type="button" className="lp-thumbnail" aria-label={`Select layer ${layer.name}`} onClick={e=>select(layer.id,e)}>{renderThumbnail(layer)}</button>
-          <div className="lp-row-content"><div className="lp-name-line">{layer.type==='group'&&<button type="button" aria-label={`${collapsed.includes(layer.id)?'Expand':'Collapse'} ${layer.name}`} onClick={()=>setCollapsed(collapsed.includes(layer.id)?collapsed.filter(id=>id!==layer.id):[...collapsed,layer.id])}>{collapsed.includes(layer.id)?'▸':'▾'}</button>}{editing===layer.id?<input autoFocus aria-label="Layer name" value={draft} onChange={e=>setDraft(e.target.value)} onBlur={finishRename} onKeyDown={e=>{e.stopPropagation();if(e.key==='Enter')finishRename();if(e.key==='Escape')setEditing(null)}}/>:<button type="button" className="lp-name" onClick={e=>select(layer.id,e)} onDoubleClick={()=>rename(layer)} title="Double-click to rename">{layer.name}</button>}<button type="button" className="lp-rename" aria-label={`Rename ${layer.name}`} disabled={locked.all} onClick={()=>rename(layer)}>✎</button></div>
-            <small>{layer.linkId||layer.sourceLink?'Linked · ':''}{layer.role||layer.type} · {layer.sourceKind==='vector-word'?'Embedded Illustrator vector':layer.sourceKind==='smart'?'Smart object pixels':layer.type}{layer.empty?' · empty transparent layer':''}{hasChildren?' · folder':''}{locked.all||locked.position||locked.pixels?' · locked':''}</small>
+          <div className="lp-row-content"><div className="lp-name-line">{layer.type==='group'&&<button type="button" className={`lp-chevron${open?' is-open':''}`} aria-label={`${open?'Collapse':'Expand'} ${layer.name}`} aria-expanded={open} onClick={event=>{const ids=event.altKey?[layer.id,...descendants(state,layer.id).filter(id=>state.nodes.find(node=>node.id===id)?.type==='group')]:[layer.id];setExpanded(ids,!open)}}><Icon name="chevron" /></button>}{layer.type==='group'&&<span className="lp-folder"><Icon name="group" /></span>}{editing===layer.id?<input autoFocus aria-label="Layer name" value={draft} onChange={e=>setDraft(e.target.value)} onBlur={finishRename} onKeyDown={e=>{e.stopPropagation();if(e.key==='Enter')finishRename();if(e.key==='Escape')setEditing(null)}}/>:<button type="button" className="lp-name" onClick={e=>select(layer.id,e)} onDoubleClick={()=>rename(layer)} title="Double-click to rename">{layer.name}</button>}<button type="button" className="lp-rename" aria-label={`Rename ${layer.name}`} disabled={locked.all} onClick={()=>rename(layer)}>✎</button></div>
+            <small>{layer.linkId||layer.sourceLink?'Linked · ':''}{layer.role?roleLabel(layer.role):layer.type} · {layer.sourceKind==='vector-word'?'Embedded Illustrator vector':layer.sourceKind==='raster-piece'?'raster':layer.sourceKind==='smart'?'Smart object pixels':layer.type}{layer.empty?' · empty transparent layer':''}{hasChildren?' · folder':''}{locked.all||locked.position||locked.pixels?' · locked':''}</small>
             {(layer.mask||layer.fx?.stroke?.enabled||layer.importedEffects)&&<details className="lp-submenu"><summary>fx / masks</summary>{layer.mask&&<button type="button" onClick={()=>{onSelect([layer.id]);setInspector('mask')}}>▣ {layer.mask.kind==='bitmap'?'Imported mask':'Vector mask'} · {layer.mask.linked?'linked':'unlinked'}</button>}{layer.fx?.stroke?.enabled&&<button type="button" onClick={()=>{onSelect([layer.id]);setInspector('fx')}}>fx Inner stroke</button>}{Object.entries(layer.importedEffects||{}).filter(([,v])=>v&&typeof v==='object').map(([name])=><small key={name}>fx {name} · imported source</small>)}</details>}
           </div>
         </div>

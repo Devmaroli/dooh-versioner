@@ -10,7 +10,7 @@ test('IKEA Illustrator smart-object words render from embedded vectors; Ctrl/Shi
   await page.goto('/');await expect(page.getByText('Saved on this device')).toBeVisible()
   await page.locator('input[type=file]').setInputFiles(fixture!)
   await page.getByRole('button',{name:'Continue to Analyse'}).click()
-  await page.locator('.analyse-layer').nth(6).click();await page.getByRole('button',{name:'Main headline',exact:true}).click()
+  await page.locator('button.lp-name',{hasText:/^Vector Smart Object$/}).click();await page.getByRole('button',{name:'Main headline',exact:true}).click()
   await page.getByRole('button',{name:/3 · Adapt/}).click();await page.getByRole('button',{name:'Edit Alshaheed - Mupi',exact:true}).click()
   await page.getByRole('button',{name:'Prepare headline words',exact:true}).click()
   const rows=page.locator('.lp-row').filter({hasText:/Word [0-9]+ · embedded vector/})
@@ -59,7 +59,7 @@ test('IKEA Illustrator smart-object words render from embedded vectors; Ctrl/Shi
 test('existing pixel word pieces can be upgraded to their embedded Illustrator source without losing placements',async({page})=>{
   const fixture=process.env.IKEA_PSD;test.skip(!fixture||!fs.existsSync(fixture),'Private IKEA PSD required.')
   await page.goto('/');await expect(page.getByText('Saved on this device')).toBeVisible();await page.locator('input[type=file]').setInputFiles(fixture!)
-  await page.getByRole('button',{name:'Continue to Analyse'}).click();await page.locator('.analyse-layer').nth(6).click();await page.getByRole('button',{name:'Main headline',exact:true}).click()
+  await page.getByRole('button',{name:'Continue to Analyse'}).click();await page.locator('button.lp-name',{hasText:/^Vector Smart Object$/}).click();await page.getByRole('button',{name:'Main headline',exact:true}).click()
   await page.getByRole('button',{name:'Trace original border',exact:true}).click()
   for(const [name,value] of [['X','99'],['Y','279'],['Width','1522'],['Height','732']])await page.getByRole('spinbutton',{name,exact:true}).fill(value)
   await page.getByRole('button',{name:'Use original border',exact:true}).click();await page.getByRole('button',{name:'Separate words (source pixels)',exact:true}).click()

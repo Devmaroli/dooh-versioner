@@ -37,3 +37,27 @@ export function prepareSourceText(art, id, action) {
   invalidateBackground(art)
   return { message: layer.vectorPdf ? `Separated ${pieces.length} words backed by the embedded Illustrator vector source. Preview and export render each crop at its requested resolution. Review all five guides.` : `Separated ${pieces.length} source-pixel words. No embedded vector source is available. Review all five guides.`, pieces }
 }
+
+export function prepareAnyLayer(art, id) {
+  const layer = allLayers(art).find(item => item.id === id)
+  if (layer?.children?.length) throw new Error('Prepare a layer inside the group. A folder is not flattened into new artwork.')
+  if (!layer?.px || layer.wordSourceId || layer.splitIntoWords) throw new Error('Select one original layer. Existing split pieces stay as they are.')
+  if (layer.logoProtected && art.layerConstraints?.[id]?.allowSplit !== true) throw new Error('This logo is protected. Allow split on this layer before separating it.')
+  const verifiedVector = !!layer.vectorPdf
+  const pieces = splitSourceWords(layer).map((crop, index) => ({
+    id: crypto.randomUUID(), parentId: id, vector: verifiedVector,
+    name: verifiedVector ? `Part ${index + 1} · embedded vector` : `Part ${index + 1} · raster`,
+    crop,
+  }))
+  const group = { id: crypto.randomUUID(), name: `${layer.name || 'Layer'} split`, layerIds: pieces.map(piece => piece.id), source: verifiedVector ? 'vector' : 'raster' }
+  art.wordPieces = [...(art.wordPieces || []), ...pieces]
+  art.preparationGroups = [...(art.preparationGroups || []), group]
+  const role = art.an.roles.find(item => item.id === id)?.role || 'other'
+  for (const piece of pieces) {
+    art.an.roles.push({ id: piece.id, role, confidence: 1, why: verifiedVector ? 'Split from a verified embedded vector source' : 'Raster source-pixel separation. No paths were invented.' })
+    art.layerConstraints = { ...art.layerConstraints, [piece.id]: { required: false, anchor: 'free', orientation: 'preserve' } }
+  }
+  art.layerLinks = unlinkLayers(art.layerLinks || [], [id])
+  invalidateBackground(art)
+  return { message: verifiedVector ? `Split ${pieces.length} parts from the embedded vector source into “${group.name}”.` : `Separated ${pieces.length} raster pieces from source pixels into “${group.name}”. No vector paths were invented.`, pieces, group }
+}

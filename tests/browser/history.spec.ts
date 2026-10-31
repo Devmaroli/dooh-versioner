@@ -33,7 +33,7 @@ test('linked untagged IKEA source can prepare border and independent words in on
   await page.goto('/'); await expect(page.getByText('Saved on this device')).toBeVisible()
   await page.locator('input[type=file]').setInputFiles(fixture!)
   await page.getByLabel('Language for ikea.psd').selectOption('EN'); await page.getByRole('button', { name: 'Continue to Analyse' }).click()
-  await page.locator('.analyse-layer').nth(6).click(); await page.locator('.analyse-layer').nth(8).click({ modifiers: ['Control'] })
+  await page.locator('button.lp-name', { hasText: /^Vector Smart Object$/ }).click(); await page.locator('button.lp-name', { hasText: /^CTA$/ }).click({ modifiers: ['Control'] })
   await page.getByRole('button', { name: 'Link selected', exact: true }).click()
   await page.getByRole('button', { name: /3 · Adapt/ }).click(); await page.getByRole('button', { name: 'Edit Alshaheed - Mupi', exact: true }).click()
   const selector = page.getByLabel('Main headline source', { exact: true })

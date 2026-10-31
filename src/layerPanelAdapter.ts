@@ -31,6 +31,49 @@ export function panelForArtwork(art: any, layout: any[], proof: any): LayerPanel
   return reconcilePanel(proof?.panel,templates)
 }
 
+export function sourcePanel(art: any): LayerPanelState {
+  const templates: LayerRecord[] = []
+  const expanded = art.groupExpanded || {}
+  const linked = new Set((art.layerLinks || []).flatMap((link: { layerIds: string[] }) => link.layerIds))
+  function walk(layers: any[], parentId: string | null) {
+    for (const layer of layers || []) {
+      const group = !!layer.children?.length
+      const id = group ? `psd:${layer.id}` : layer.id
+      templates.push({
+        id, name: layer.name || 'Layer', type: group ? 'group' : layer.kind === 'text' ? 'text' : layer.kind === 'shape' ? 'vector' : 'pixel',
+        parentId, visible: art.layerVisibility?.[layer.id] !== false && !layer.hidden,
+        blendMode: layer.sourceBlend === 'pass through' ? 'pass-through' : (layer.blend || layer.sourceBlend || 'normal'),
+        opacity: layer.opacity ?? 1, fill: layer.fillOpacity ?? 1, locks: unlocked(), mask: null,
+        sourceIds: [layer.id], memberIds: group ? [] : [layer.id], importedGroup: group || undefined,
+        expanded: group ? expanded[id] !== false : undefined,
+        role: art.an?.roles?.find((role: { id: string; role: string }) => role.id === layer.id)?.role,
+        sourceLink: linked.has(layer.id),
+      })
+      if (group) walk(layer.children, id)
+    }
+  }
+  walk(art.a?.layers || [], null)
+  for (const piece of art.wordPieces || []) {
+    templates.push({
+      id: piece.id, name: piece.name, type: piece.vector ? 'vector' : 'pixel', parentId: null, visible: art.layerVisibility?.[piece.id] !== false,
+      blendMode: 'normal', opacity: 1, fill: 1, locks: unlocked(), mask: null, sourceIds: [piece.id], memberIds: [piece.id],
+      sourceKind: piece.vector ? 'vector-word' : 'raster-piece', role: art.an?.roles?.find((role: { id: string }) => role.id === piece.id)?.role,
+    })
+  }
+  for (const group of art.preparationGroups || []) {
+    if (templates.some(node => node.id === group.id)) continue
+    templates.push({
+      id: group.id, name: group.name, type: 'group', parentId: null, visible: true, blendMode: 'pass-through', opacity: 1, fill: 1,
+      locks: unlocked(), mask: null, sourceIds: [], memberIds: group.layerIds, expanded: expanded[group.id] !== false,
+    })
+    for (const id of group.layerIds) {
+      const node = templates.find(item => item.id === id)
+      if (node) node.parentId = group.id
+    }
+  }
+  return reconcilePanel(art.layerPanel, templates)
+}
+
 export function panelGroupProofs(panel: LayerPanelState) {
   return panel.nodes.filter(n=>!n.deleted&&n.type==='group').map(n=>({id:n.id,kind:'group',unitIds:panel.nodes.filter(child=>!child.deleted&&descendants(panel,n.id).includes(child.id)).flatMap(child=>child.type==='group'?[]:child.memberIds)})).filter(g=>g.unitIds.length)
 }
