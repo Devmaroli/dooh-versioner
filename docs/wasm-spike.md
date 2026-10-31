@@ -7,7 +7,7 @@ Tested source: [VectorCraft](https://github.com/storytold/vectorcraft/tree/1bb52
 | SVG import + export round trip | passed | 11,198,733 | 9,310,734 |
 | Document JSON to rendered RGBA | passed | 10,631,867 | 8,812,192 |
 
-Decision: use the JS importer. Both standalone payloads exceed the requested approximately 8 MB limit, even after excluding custom sections (also above 8 MiB). No WASM is vendored, loaded, or shipped; no CSP change is made. The existing stylesheet/reference/gradient/font fixes stay behind the same JS import API.
+Initial decision (superseded after the user waived the size cutoff): use the JS importer. Both standalone payloads exceed the requested approximately 8 MB limit, even after excluding custom sections (also above 8 MiB). At that spike stage, no WASM was vendored, loaded, or shipped and no CSP change was made. The existing stylesheet/reference/gradient/font fixes stay behind the same JS import API.
 
 These are compilation and size results, not browser rendering/parity results. The size experiment used `opt-level = "s"` and LTO. A wasm-bindgen CLI packaging pass and wasm-opt were not run; the custom-section-free counts are structural lower counts for these compiled binaries, not measured final JS glue distributions or a claim that further optimization is impossible. The renderer emitted one nonfatal unused `automatic_threads` warning. No bundled-font feature was requested. No PhotoCraft PSD work was performed.
 
@@ -27,3 +27,9 @@ Copy the first output before the second command overwrites it. Each output is `s
 For the custom-section-free count, parse the WASM section stream after its 8-byte header, read each section's unsigned LEB128 payload length, and sum the header plus encoded sections whose ID is not zero. This excludes names, producers, target-feature metadata and wasm-bindgen descriptors. Retain the original module for actual wasm-bindgen packaging.
 
 The reproducer is original bridge code, not vendored VectorCraft code. Upstream libraries remain Apache-2.0/MIT dependencies used only in the scratch build. If a later change ships upstream source or WASM, include the applicable upstream LICENSE/NOTICE files in both web and extension distributions and reassess browser semantics and CSP at that point.
+
+## Production integration after the size cutoff was waived
+
+The SVG WASM bridge is now shipped. Its wasm-bindgen module is 10,932,756 bytes uncompressed and 3,465,368 bytes as the local gzip asset. Compilation and local decompression run in a worker. Both web and MV3 distributions include the module, upstream LICENSE/NOTICE files and reachable Rust dependency license texts. Only `wasm-unsafe-eval` was added to the extension script policy; permissions remain empty.
+
+This is a hybrid integration: JS preserves the source layer hierarchy, CSS cascade, editable gradient data, verified text/font state and linked/embedded image metadata. VectorCraft normalizes each styled shape before the browser rasterizes it. Normalizing the entire original SVG and accepting its export would lose text when Rust has no matching fonts and turn unresolved images into placeholders, so those source layers are not replaced. Edits re-run normalization; warnings require review and WASM failures are visible. The separate Rust render crate is not shipped, and PDF import is unchanged. See `src/vendor/vectorcraft/README.md` and `scripts/svg-wasm` for the production bridge and rebuild instructions.

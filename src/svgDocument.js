@@ -373,7 +373,7 @@ export function parseSvgArtwork(svg, file = 'artwork.svg', files = new Map()) {
         box = boxFromPoints(corners(next, x - pad, y - pad, w + pad * 2, h + pad * 2))
       }
       if (!(box[2] > 0) || !(box[3] > 0)) return []
-      return [{ id: `svg${serial++}`, name: node.attrs['inkscape:label'] || node.attrs.id || node.name, kind: 'shape', pathData: d, fill: paint(node.attrs, style, 'fill') || '#000', stroke: paint(node.attrs, style, 'stroke'), strokeWidth: lengthOf(node.attrs['stroke-width'] || style['stroke-width'], 1), localBox: localBox(node), fillGradient: paintGradient(computed.fill), strokeGradient: paintGradient(computed.stroke), svgShape: svgElement(node.name, { ...computed, opacity: 1, transform: null }), box, opacity, clip, transform: next, sourceKind: 'svg-path' }]
+      return [{ id: `svg${serial++}`, name: node.attrs['inkscape:label'] || node.attrs.id || node.name, kind: 'shape', pathData: d, fill: paint(node.attrs, style, 'fill') || '#000', stroke: paint(node.attrs, style, 'stroke'), strokeWidth: lengthOf(node.attrs['stroke-width'] || style['stroke-width'], 1), localBox: localBox(node), fillGradient: paintGradient(computed.fill), strokeGradient: paintGradient(computed.stroke), svgShape: svgElement(node.name, { ...computed, opacity: 1, transform: null, 'clip-path': null }), box, opacity, clip, transform: next, sourceKind: 'svg-path' }]
     }
     return node.children.flatMap(child => visit(child, next, clip, computed, [...parents, original], seen))
   }
@@ -389,4 +389,13 @@ function union(layers) {
   if (!boxes.length) return [0, 0, 0, 0]
   const x = Math.min(...boxes.map(box => box[0])), y = Math.min(...boxes.map(box => box[1]))
   return [x, y, Math.max(...boxes.map(box => box[0] + box[2])) - x, Math.max(...boxes.map(box => box[1] + box[3])) - y]
+}
+
+// Preserve editable paint/geometry in the model and build an isolated source
+// for the WASM geometry pass. Layer clipping/opacity belong to the compositor.
+export function svgLayerSource(layer, width, height) {
+  const [x, y, w, h] = layer.box
+  const defs = [...new Set([layer.fillGradient, layer.strokeGradient].map(gradient => gradient ? svgElement(gradient.type, gradient.attrs, gradient.stops.map(stop => svgElement('stop', stop)).join('')) : null).filter(Boolean))].join('')
+  const matrix = layer.transform || [1, 0, 0, 1, 0, 0]
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="${x} ${y} ${w} ${h}"><defs>${defs}</defs><g transform="matrix(${matrix.join(' ')})">${layer.svgShape}</g></svg>`
 }

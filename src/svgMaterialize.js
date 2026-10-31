@@ -1,3 +1,5 @@
+import { svgLayerSource } from './svgDocument.js'
+import { normalizeSvgWithWasm } from './svgWasm.js'
 import { svgElement } from './svgStyle.js'
 import { resolveFont } from './fontResolve.js'
 let worker
@@ -124,9 +126,10 @@ export async function rasterizeSvgLayer(layer) {
   if (layer.clip?.d) { context.clip(new Path2D(layer.clip.d)) }
   else if (layer.clip?.rect) { const [cx, cy, cw, ch] = layer.clip.rect; context.beginPath(); context.rect(cx, cy, cw, ch); context.clip() }
   if (layer.svgShape) {
-    const defs = [...new Set([layer.fillGradient, layer.strokeGradient].map(gradient => gradient ? svgElement(gradient.type, gradient.attrs, gradient.stops.map(stop => svgElement('stop', stop)).join('')) : null).filter(Boolean))].join('')
-    const m = layer.transform || [1, 0, 0, 1, 0, 0]
-    const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${canvas.width}" height="${canvas.height}" viewBox="${x} ${y} ${w} ${h}"><defs>${defs}</defs><g transform="matrix(${m.join(' ')})">${layer.svgShape}</g></svg>`
+    const normalized = await normalizeSvgWithWasm(svgLayerSource(layer, canvas.width, canvas.height))
+    layer.geometryEngine = 'vectorcraft-wasm'
+    layer.svgWarnings = normalized.warnings
+    const svg = normalized.svg
     const url = URL.createObjectURL(new Blob([svg], { type: 'image/svg+xml' }))
     try {
       const image = new Image()
@@ -228,9 +231,11 @@ export async function materializeSvgArtwork(artwork) {
       }
       const canvas = await rasterizeSvgLayer(layer)
       if (canvas) Object.defineProperty(layer, 'px', { value: canvas, enumerable: false })
+      for (const warning of layer.svgWarnings || []) artwork.warnings.push(`VectorCraft: ${layer.name}: ${warning}. Needs review.`)
     }
     if (index % 12 === 11) await new Promise(resolve => setTimeout(resolve, 0))
   }
+  if (artwork.source?.format === 'svg') artwork.source.svgGeometry = layers.some(layer => layer.geometryEngine === 'vectorcraft-wasm') ? 'vectorcraft-wasm' : 'text-and-images'
   delete artwork.fontFiles
   return artwork
 }

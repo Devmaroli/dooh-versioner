@@ -14,8 +14,10 @@ test('SVG class colours and native linear/radial gradient pixels survive materia
     editable.fillGradient.stops[0]['stop-color'] = '#00ff00'
     const updated = await rasterizeSvgLayer(editable)
     const edited = Array.from(updated.getContext('2d').getImageData(2, 10, 1, 1).data)
-    return { edited, red: pixel('class', 10, 10), yellow: pixel('inline', 10, 10), linearStart: pixel('linear-box', 2, 10), linearEnd: pixel('linear-box', 97, 10), radialCentre: pixel('radial-box', 20, 20), radialEdge: pixel('radial-box', 1, 20) }
+    return { engines: layers.filter(l => l.kind === 'shape').map(l => l.geometryEngine), engine: artwork.source.svgGeometry, edited, red: pixel('class', 10, 10), yellow: pixel('inline', 10, 10), linearStart: pixel('linear-box', 2, 10), linearEnd: pixel('linear-box', 97, 10), radialCentre: pixel('radial-box', 20, 20), radialEdge: pixel('radial-box', 1, 20) }
   }, svgPaints)
+  expect(pixels.engine).toBe('vectorcraft-wasm')
+  expect(pixels.engines.every(engine => engine === 'vectorcraft-wasm')).toBe(true)
   expect(pixels.edited[1]).toBeGreaterThan(240)
   expect(pixels.red).toEqual([255, 0, 0, 255])
   expect(pixels.yellow).toEqual([255, 255, 0, 255])
@@ -62,4 +64,17 @@ test('unavailable SVG fonts are explicit and never draw fallback text', async ({
   expect(result.editable).toBe(false)
   expect(result.pixels).toBe(false)
   expect(result.warnings.join(' ')).toContain('no substitute rendered')
+})
+
+
+test('WASM initialization failure is visible and never silently switches to JS', async ({ page }) => {
+  await page.route('**/*.wasm*', route => route.abort())
+  await page.goto('/')
+  const error = await page.evaluate(async () => {
+    const { parseSvgArtwork } = await import('/src/svgDocument.js')
+    const { materializeSvgArtwork } = await import('/src/svgMaterialize.js')
+    try { await materializeSvgArtwork(parseSvgArtwork('<svg viewBox="0 0 20 20"><rect width="20" height="20"/></svg>')); return '' }
+    catch (e) { return String(e) }
+  })
+  expect(error).toContain('VectorCraft SVG')
 })
