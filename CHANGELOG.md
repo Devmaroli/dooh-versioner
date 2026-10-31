@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.7.2 — 2026-10-31
+
+- SVG import reads nested paths, groups and text instead of stopping at one shallow tag. Each `<image>` becomes its own pixel layer, including base64 `href` or `xlink:href` data, with its transform, clip and opacity kept.
+- Linked SVG images resolve by file name when the SVG is picked or dropped with those files, or with a folder. A missing file stays on the layer as “Missing linked image … Needs review” and can be relinked. http(s) addresses are never downloaded.
+- PDF import uses the bundled pdf.js worker. Page 1 opens first, with a page picker when there are more. Text and vector paths stay editable layers. Embedded page images become pixel layers. A page with none of those falls back to a labelled raster. `.ai` imports only when the file is PDF-compatible.
+- Large SVG text is scanned without a backtracking expression, and embedded image bytes decode off the main thread.
+
 ## 1.7.1 — 2026-10-31
 
 - Layer groups keep imported nesting, cascade visibility, lock and opacity, and remember whether they are open.

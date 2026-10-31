@@ -1,6 +1,6 @@
-# Studio UX — 1.7.1
+# Studio UX — 1.7.2
 
-Version 1.7.1 adds persistent Photoshop-style groups, the three-column Analyse layout, and Prepare / split for any layer. See the changelog.
+Version 1.7.2 imports SVG vectors and PDF pages as editable layers, including raster images stored inside the file. See the changelog.
 
 DOOH Creative Studio adapts existing masters to screen presets. It does not invent photography, products, logos, prices, contact details, legal lines or translations.
 
@@ -52,6 +52,12 @@ Automated findings are not the same as guide approval or output approval. Hard f
 ## Persistence
 
 Metadata schema is version 2. IndexedDB stores the original file. Version 1 projects migrate on open. Confirmed roles win over a new automatic suggestion. Derived pixel caches are dropped on restore.
+
+## SVG and PDF import
+
+An SVG becomes layers: groups, paths, text, and one pixel layer per image. Embedded images use a base64 data URI on `href` or `xlink:href`. Linked images match the file name when those files are chosen with the SVG, dropped beside it, or dropped as a folder. A missing link is labelled “Missing linked image … Needs review” and has a Relink action. The app does not request http(s) image addresses. Image transform, clip-path and opacity stay on the layer. The source is `embedded` or `linked`.
+
+A PDF opens on page 1. Extra pages use the page picker. Text and simple paths become layers. Embedded images become pixel layers with the content-stream placement. A page that yields none of those uses one raster labelled “Page raster”. An `.ai` file imports only when it is a PDF-compatible Illustrator file. Annotations, soft masks, patterns and external PDF links are not fetched or rebuilt as layers. Path placement is the flipped PDF user space and can need a visual check.
 
 ## PSD and PDF limits
 

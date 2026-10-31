@@ -52,7 +52,7 @@ function LayerThumbnail({ layer }: { layer: Layer }) {
   return <canvas ref={ref} width={80} height={56} className="layer-thumbnail" aria-hidden="true" />
 }
 
-export function LayerTagger({ art, onChange }: { art: Art; onChange: () => void }) {
+export function LayerTagger({ art, onChange, onRelink }: { art: Art; onChange: () => void; onRelink?: (files: FileList) => void }) {
   const layers = useMemo(() => allLayers(art).filter(l => !l.children?.length && l.box && l.box[2] > 0 && l.box[3] > 0), [art, art.layerVisibility, art.layerCrops, art.wordPieces, art.layerConstraints])
   const [cursor, setCursor] = useState(0)
   const [selectedIds, setSelectedIds] = useState<string[]>([layers[0]?.id].filter(Boolean))
@@ -80,6 +80,7 @@ export function LayerTagger({ art, onChange }: { art: Art; onChange: () => void 
   const shownRegion = draft || region
   const canDraw = !layer?.logoProtected && !layer?.wordSourceId && selectedLayers.length === 1 && !!layer?.px && !layer.effectiveHidden && art.a.source?.format !== 'image'
   const assigned = layers.filter(l => art.an.roles.some(r => r.id === l.id && r.confidence === 1)).length
+  const missingLinks = allLayers(art).filter(item => (item as { missingLink?: boolean; decodeError?: boolean }).missingLink || (item as { decodeError?: boolean }).decodeError)
 
   useEffect(() => {
     const canvas = canvasRef.current
@@ -280,9 +281,10 @@ export function LayerTagger({ art, onChange }: { art: Art; onChange: () => void 
 
   if (art.a.source?.format === 'image' || !layers.length) return <p>No editable layers were detected. A flattened image needs a layered PSD for individual tagging.</p>
   return <section className="analyse-editor" aria-label="Layer identification">
+    {missingLinks.length > 0 && <div className="analyse-attention" role="status">{missingLinks.map(item => <p key={item.id}>{(item as { decodeError?: boolean }).decodeError ? `Embedded image ${item.name || 'image'} could not be read. Needs review.` : `Missing linked image ${(item as { linkName?: string }).linkName || item.name}. Needs review.`}</p>)}{missingLinks.some(item => (item as { missingLink?: boolean }).missingLink) && <label className="import-file-button">Relink images<input aria-label="Relink missing images" type="file" multiple accept=".png,.jpg,.jpeg,.webp,.gif" onChange={event => { if (event.target.files?.length && onRelink) void onRelink(event.target.files); event.currentTarget.value = '' }} /></label>}</div>}
     <aside className="analyse-roles" aria-label="Layer roles">
       <div className="analyse-inspector">
-        <div className="tagger-visual"><LayerThumbnail layer={layer} /><div><strong>{layer.name || 'Unnamed layer'}</strong><small>{layer.kind || 'Layer'} · {layer.box?.[2]} × {layer.box?.[3]} px · Position {layer.box?.[0]}, {layer.box?.[1]}</small></div></div>
+        <div className="tagger-visual"><LayerThumbnail layer={layer} /><div><strong>{layer.name || 'Unnamed layer'}</strong><small>{layer.kind || 'Layer'}{(layer as { imageSource?: string }).imageSource ? ` · ${(layer as { imageSource?: string }).imageSource}` : ''} · {layer.box?.[2]} × {layer.box?.[3]} px · Position {layer.box?.[0]}, {layer.box?.[1]}</small></div></div>
         <div className="tagger-question"><h3>{selectedLayers.length > 1 ? `Identify ${selectedLayers.length} selected layers` : 'What is this layer?'}</h3><p>{mixedValue(selectedLayers, item => canonicalRole(art.an.roles.find(r => r.id === item.id)?.role)).mixed ? 'Mixed roles — choosing a role confirms only that field.' : `${role?.confidence === 1 || role?.confirmed ? 'Confirmed' : 'Suggested'}: ${roleLabel(role?.role)}`}</p>
           <div className="tag-options">{TAGS.map(([id, label]) => <button type="button" key={id} disabled={!selectedIds.length} className={selectedLayers.every(l => art.an.roles.find(r => r.id === l.id)?.role === id) ? 'chosen' : ''} aria-pressed={selectedLayers.length > 0 && selectedLayers.every(l => art.an.roles.find(r => r.id === l.id)?.role === id)} onClick={() => assignRole(id)}>{label}</button>)}</div>
           <div className="analyse-selection-actions"><span>{selectedIds.length} selected · Ctrl/Cmd-click to add · Shift-click for a range</span><button type="button" className="ghost" disabled={!layer?.px || !!layer.wordSourceId || !!layer.splitIntoWords || !!layer.children?.length || (layer.logoProtected && art.layerConstraints?.[layer.id]?.allowSplit !== true)} onClick={prepareSplit}>Prepare / split</button><button type="button" className="ghost" disabled={selectedLayers.length !== 1 || !layer?.px || layer.wordSourceId || layer.splitIntoWords || layer.logoProtected || role?.role !== 'headline'} onClick={separateWords}>Separate words (source pixels)</button><button type="button" className="ghost" disabled={!selectedLayers.some(l => l.wordSourceId || l.splitIntoWords)} onClick={restoreWords}>Restore combined words</button><button type="button" className="ghost" disabled={selectedIds.length < 2 || selectedLayers.some(l => art.an.roles.find(r => r.id === l.id)?.role === 'bg')} onClick={linkSelection}>Link selected</button><button type="button" className="ghost" disabled={!(art.layerLinks || []).some(link => link.layerIds.some(id => selectedIds.includes(id)))} onClick={unlinkSelection}>Unlink selected</button><button type="button" className="ghost" disabled={!selectedIds.length} onClick={() => visibility(selectedIds, true)}>Show selected</button><button type="button" className="ghost" disabled={!selectedIds.length} onClick={() => visibility(selectedIds, false)}>Hide selected</button></div>

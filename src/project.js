@@ -5,7 +5,7 @@ export const STEPS = ['import', 'analyse', 'adapt', 'review', 'export']
 export const STEP_LABELS = { import: 'Import', analyse: 'Analyse', adapt: 'Adapt', review: 'Review & edit', export: 'Export' }
 export const MAX_FILE_BYTES = 128 * 1024 * 1024
 export function validateFile(file) {
-  if (!/\.(psd|psb|svg|png|jpe?g|webp)$/i.test(file.name)) throw new Error('Unsupported format. Use PSD, PSB, SVG, PNG, JPEG or WebP.')
+  if (!/\.(psd|psb|svg|pdf|ai|png|jpe?g|webp|gif)$/i.test(file.name)) throw new Error('Unsupported format. Use PSD, PSB, SVG, PDF, AI, PNG, JPEG, GIF or WebP.')
   if (!file.size) throw new Error('This file is empty.')
   if (file.size > MAX_FILE_BYTES) throw new Error('This file exceeds the 128 MB import limit. Save a smaller master and retry.')
 }

@@ -16,6 +16,9 @@ import { drawOriginalBorder, borderGeometry } from '../border.js'
 import { allLayers, drawSourceLayers } from '../artwork.js'
 import { proofForScreen, screenProofKey, layoutFamily, calibrationReady, guideLayout, guideFindings, sourceSignature } from '../layoutGuides.js'
 import { readPsd } from 'ag-psd'
+import { parseSvgArtwork } from '../svgDocument.js'
+import { materializeSvgArtwork, relinkImages } from '../svgMaterialize.js'
+import { artworkFromPdf } from '../pdfImport.js'
 import { PRESET_FILES, SAMPLE_PSD_B64, SAMPLE_SVG } from './presets.js'
 
 const MW=1920,MH=1080;
@@ -331,9 +334,16 @@ function bakeFx(src,fx){const px=v=>v==null?0:typeof v==="number"?v:+v.value||0,
   g.drawImage(src,pad,pad);return {c,pad};}
 
 
+function collectFonts(layers, fonts = []) {
+  for (const layer of layers || []) {
+    if (layer.font) fonts.push(layer.font)
+    collectFonts(layer.children, fonts)
+  }
+  return fonts
+}
 function artLoad(a, thumb) {
   validateDimensions(a.w, a.h)
-  const fonts = [...new Set(JSON.stringify(a.layers).match(/"font":"[^"]+"/g) || [])].map((x) => x.slice(8, -1))
+  const fonts = [...new Set(collectFonts(a.layers))]
   const an = Adapt.analyseArtwork(a, fonts.filter(fontOK).concat(['__none__']))
   pxFixStyle(a, an)
   const lr = an.rules.find((r) => r.key === 'lang')
@@ -368,10 +378,34 @@ export function loadSamplePsd() {
   artLoad(psdFromBuf(bin.buffer, 'sample.psd'))
   return ARTS.length
 }
-export function importSvgText(text, name) {
-  artLoad(Adapt.fromSVG(text, name))
-  return ARTS.length
+function keepImportWarnings(art, artwork) {
+  const extra = artwork.warnings || []
+  if (extra.length) art.an.warnings = [...new Set([...(art.an.warnings || []), ...extra])]
+  return art
 }
+export async function importSvgText(text, name, files) {
+  await new Promise(resolve => setTimeout(resolve, 0))
+  const artwork = parseSvgArtwork(text, name, files)
+  await new Promise(resolve => setTimeout(resolve, 0))
+  await materializeSvgArtwork(artwork)
+  return keepImportWarnings(artLoad(artwork), artwork)
+}
+export async function importPdfBuffer(buffer, name, page = 1) {
+  const artwork = await artworkFromPdf(buffer, name, page)
+  await materializeSvgArtwork(artwork)
+  return keepImportWarnings(artLoad(artwork), artwork)
+}
+export async function reloadPdfPage(art, buffer, page) {
+  const artwork = await artworkFromPdf(buffer, art.name, page)
+  await materializeSvgArtwork(artwork)
+  art.a = artwork
+  art.an = Adapt.analyseArtwork(artwork, collectFonts(artwork.layers).filter(fontOK))
+  if (artwork.warnings?.length) art.an.warnings = [...new Set([...(art.an.warnings || []), ...artwork.warnings])]
+  delete art.U
+  delete art.BG
+  return art
+}
+export { relinkImages }
 export function importPsdBuffer(buf, name) {
   artLoad(psdFromBuf(buf, name))
   return ARTS.length

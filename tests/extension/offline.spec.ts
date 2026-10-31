@@ -28,11 +28,11 @@ test('actual MV3 origin works offline, escapes artwork names, persists, exports 
     const id = await item.getAttribute('id'), origin = `chrome-extension://${id}`; await manager.close()
     await context.setOffline(true)
     const popup = await context.newPage(); await popup.goto(`${origin}/popup.html`)
-    await expect(popup.getByText(/v1\.6\.0/)).toBeVisible(); await expect(popup.locator('body')).not.toContainText('Kapildev')
+    await expect(popup.getByText(/v1\.7\.2/)).toBeVisible(); await expect(popup.locator('body')).not.toContainText('Kapildev')
     const opening = context.waitForEvent('page'); await popup.getByRole('link', { name: 'Open Studio', exact: true }).click()
     const page = await opening; await page.waitForURL(`${origin}/index.html`); await expect(page.getByText('Saved on this device')).toBeVisible()
     await expect(page).toHaveTitle('DOOH Creative Studio')
-    await expect(page.getByLabel('Version 1.7.1', { exact: true })).toBeVisible(); await expect(page.locator('body')).not.toContainText('Kapildev')
+    await expect(page.getByLabel('Version 1.7.2', { exact: true })).toBeVisible(); await expect(page.locator('body')).not.toContainText('Kapildev')
     await page.evaluate(() => { const violations: string[] = []; document.addEventListener('securitypolicyviolation', event => violations.push(event.effectiveDirective)); Reflect.set(window, 'violations', violations) })
     const hostile = '<img src="https://invalid.example/leak" onerror="window.injected=true">'
     const psd = writePsdBuffer({ width: 64, height: 64, imageData: pixels([80, 120, 160]), children: [{ name: 'Base texture', left: 0, top: 0, imageData: pixels([80, 120, 160]) }, { name: hostile, left: 0, top: 0, imageData: pixels([160, 80, 40]), blendMode: 'screen', opacity: .5 }] }, { generateThumbnail: false })
