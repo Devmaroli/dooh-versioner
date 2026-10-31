@@ -5,14 +5,15 @@ import { splitSourceWords } from './words.js'
 import { detectSourceBorder, borderInterior } from './border.js'
 import { allLayers, drawSourceLayers, unionBounds, selectLayers, linkLayers, unlinkLayers, setLayerVisibility } from './artwork.js'
 import { backgroundCrop, invalidateBackground, rectangleBetween } from './background.js'
+import { ROLE_CONTROL_LABELS, canonicalRole, mixedValue, patchConstraints, roleLabel } from './tagging.js'
 
 type Rect = { x: number; y: number; w: number; h: number }
 type Layer = { id: string; name?: string; kind?: string; hidden?: boolean; box?: number[]; px?: HTMLCanvasElement; children?: Layer[] }
 type Region = Rect & { layerId: string; scope?: string }
-type Constraint = { required: boolean; anchor: string; orientation: string; margin?: number; protectedLogo?: boolean }
+type Constraint = { required?: boolean; anchor?: string; orientation?: string; margin?: number; protectedLogo?: boolean; priority?: string; inclusion?: string; graphicSubtype?: string }
 type Art = {
   a: { w: number; h: number; layers: Layer[]; composite?: HTMLCanvasElement; source?: { format?: string } }
-  an: { roles: { id: string; role: string; why?: string; confidence?: number }[] }
+  an: { roles: { id: string; role: string; why?: string; confidence?: number; confirmed?: boolean }[] }
   backgroundRegion?: Region | null
   layerConstraints?: Record<string, Constraint>
   wordPieces?: { id: string; parentId: string; name: string; crop: Rect }[]
@@ -22,11 +23,7 @@ type Art = {
   layerLinks?: { id: string; layerIds: string[] }[]
   previewSettings?: { alpha?: boolean; color?: string }
 }
-const TAGS = [
-  ['unassigned', 'Not sure / ask me later'], ['headline', 'Main headline'], ['offer', 'Offer / secondary message'],
-  ['logo', 'Brand logo'], ['product', 'Product / key visual'], ['bg', 'Original background texture'],
-  ['price', 'Price'], ['stamp', 'Campaign stamp / label'], ['border', 'Original border (separate layer)'], ['ignore', 'Do not adapt / decorative'], ['legal', 'Legal / fine print'], ['cta', 'Contact / call to action'],
-] as const
+const TAGS = Object.entries(ROLE_CONTROL_LABELS) as [string, string][]
 
 function LayerThumbnail({ layer }: { layer: Layer }) {
   const ref = useRef<HTMLCanvasElement>(null)
@@ -95,9 +92,8 @@ export function LayerTagger({ art, onChange }: { art: Art; onChange: () => void 
     setCursor(index); setDraft(null); setDrawing(false); start.current = null; setMessage('')
   }
   function updatePlacement(patch: Partial<Constraint>) {
-    const next = { ...art.layerConstraints }
-    for (const item of selectedLayers) next[item.id] = { required: false, anchor: 'free', orientation: 'preserve', ...next[item.id], ...patch }
-    art.layerConstraints = next; invalidateBackground(art); onChange()
+    art.layerConstraints = patchConstraints(art.layerConstraints, selectedLayers.map(item => item.id), patch)
+    invalidateBackground(art); onChange()
   }
   function assignRole(next: string) {
     const parentIds = selectedLayers.map(l => l.wordSourceId || l.id)
@@ -105,7 +101,6 @@ export function LayerTagger({ art, onChange }: { art: Art; onChange: () => void 
     if (next === 'logo') {
       if ((art.wordPieces || []).some(p => parentIds.includes(p.parentId))) restoreWords()
       if (parentIds.includes(art.originalBorder?.sourceLayerId)) clearBorder()
-      art.layerConstraints = { ...art.layerConstraints, ...Object.fromEntries(parentIds.map(id => [id, { required: false, anchor: 'free', orientation: 'preserve', ...art.layerConstraints?.[id], protectedLogo: true }])) }
     }
     for (const item of targets) {
       const current = art.an.roles.find(r => r.id === item.id)
@@ -113,8 +108,8 @@ export function LayerTagger({ art, onChange }: { art: Art; onChange: () => void 
       else art.an.roles.push({ id: item.id, role: next, why: 'Designer-confirmed layer tag', confidence: 1 })
       if (next !== 'bg' && art.backgroundRegion?.layerId === item.id) art.backgroundRegion = null
     }
-    if (next === 'stamp') updatePlacement({ anchor: 'top', margin: 2 })
-    if (next === 'legal') updatePlacement({ required: true, anchor: 'nearest' })
+    const placementPatch = next === 'stamp' ? { anchor: 'top', margin: 2, graphicSubtype: 'stamp' } : next === 'border' ? { graphicSubtype: 'border' } : next === 'legal' || next === 'regulatory' ? { required: true, anchor: 'nearest' } : next === 'ignore' ? { inclusion: 'exclude', required: false } : next === 'logo' ? { protectedLogo: true, inclusion: 'include' } : null
+    if (placementPatch) art.layerConstraints = patchConstraints(art.layerConstraints, targets.map(item => item.id), placementPatch)
     invalidateBackground(art); onChange()
   }
   function visibility(ids: string[], visible: boolean) {
@@ -279,9 +274,11 @@ export function LayerTagger({ art, onChange }: { art: Art; onChange: () => void 
           <small>Original pixels · Escape cancels · Selection uses layer pixels; PSD adjustments may differ from the composite.</small>
         </div>}
       </div>
+    </div>
+    <aside className="analyse-layers" aria-label="Artwork layers">
       <div className="analyse-inspector">
         <div className="tagger-visual"><LayerThumbnail layer={layer} /><div><strong>{layer.name || 'Unnamed layer'}</strong><small>{layer.kind || 'Layer'} · {layer.box?.[2]} × {layer.box?.[3]} px · Position {layer.box?.[0]}, {layer.box?.[1]}</small></div></div>
-        <div className="tagger-question"><h3>{selectedLayers.length > 1 ? `Identify ${selectedLayers.length} selected layers` : 'What is this layer?'}</h3><p>{role?.confidence === 1 ? 'Confirmed' : 'Suggested'}: {TAGS.find(t => t[0] === role?.role)?.[1] || 'Not identified'}</p>
+        <div className="tagger-question"><h3>{selectedLayers.length > 1 ? `Identify ${selectedLayers.length} selected layers` : 'What is this layer?'}</h3><p>{mixedValue(selectedLayers, item => canonicalRole(art.an.roles.find(r => r.id === item.id)?.role)).mixed ? 'Mixed roles — choosing a role confirms only that field.' : `${role?.confidence === 1 || role?.confirmed ? 'Confirmed' : 'Suggested'}: ${roleLabel(role?.role)}`}</p>
           <div className="tag-options">{TAGS.map(([id, label]) => <button type="button" key={id} disabled={!selectedIds.length} className={selectedLayers.every(l => art.an.roles.find(r => r.id === l.id)?.role === id) ? 'chosen' : ''} aria-pressed={selectedLayers.length > 0 && selectedLayers.every(l => art.an.roles.find(r => r.id === l.id)?.role === id)} onClick={() => assignRole(id)}>{label}</button>)}</div>
           <div className="analyse-selection-actions"><span>{selectedIds.length} selected · Ctrl/Cmd-click to add · Shift-click for a range</span><button type="button" className="ghost" disabled={selectedLayers.length !== 1 || !layer?.px || layer.wordSourceId || layer.splitIntoWords || layer.logoProtected || role?.role !== 'headline'} onClick={separateWords}>Separate words (source pixels)</button><button type="button" className="ghost" disabled={!selectedLayers.some(l => l.wordSourceId || l.splitIntoWords)} onClick={restoreWords}>Restore combined words</button><button type="button" className="ghost" disabled={selectedIds.length < 2 || selectedLayers.some(l => art.an.roles.find(r => r.id === l.id)?.role === 'bg')} onClick={linkSelection}>Link selected</button><button type="button" className="ghost" disabled={!(art.layerLinks || []).some(link => link.layerIds.some(id => selectedIds.includes(id)))} onClick={unlinkSelection}>Unlink selected</button><button type="button" className="ghost" disabled={!selectedIds.length} onClick={() => visibility(selectedIds, true)}>Show selected</button><button type="button" className="ghost" disabled={!selectedIds.length} onClick={() => visibility(selectedIds, false)}>Hide selected</button></div>
           <label className="logo-protection"><input type="checkbox" checked={selectedLayers.some(l => l.logoProtected)} disabled={selectedLayers.some(l => art.an.roles.find(r => r.id === l.id)?.role === 'logo')} onChange={e => {
@@ -289,23 +286,21 @@ export function LayerTagger({ art, onChange }: { art: Art; onChange: () => void 
             if (e.target.checked) { if ((art.wordPieces || []).some(p => ids.includes(p.parentId))) restoreWords(); if (ids.includes(art.originalBorder?.sourceLayerId)) clearBorder() }
             art.layerConstraints = { ...art.layerConstraints, ...Object.fromEntries(ids.map(id => [id, { required: false, anchor: 'free', orientation: 'preserve', ...art.layerConstraints?.[id], protectedLogo: e.target.checked }])) }; invalidateBackground(art); onChange()
           }} />Contains a logo — preserve as one</label>
-          <div className="edge-placement"><label><input type="checkbox" checked={placement.anchor !== 'free'} disabled={!selectedIds.length} onChange={e => updatePlacement({ anchor: e.target.checked ? 'nearest' : 'free' })} />Keep to edge</label>{placement.anchor !== 'free' && <><label>Edge<select aria-label="Edge" value={placement.anchor} onChange={e => updatePlacement({ anchor: e.target.value })}>{[['nearest', 'Nearest original edge'], ['top', 'Top'], ['bottom', 'Bottom'], ['left', 'Left'], ['right', 'Right'], ['locked', 'Locked relative position']].map(([id, text]) => <option key={id} value={id}>{text}</option>)}</select></label><label>Edge margin (% of short side)<input type="number" min={0} max={20} step={.5} value={placement.margin ?? 2} onChange={e => updatePlacement({ margin: Math.max(0, Math.min(20, Number(e.target.value))) })} /></label></>}</div>
+          <div className="edge-placement"><label><input type="checkbox" checked={!mixedValue(selectedLayers, item => art.layerConstraints?.[item.id]?.anchor || 'free').mixed && (placement.anchor || 'free') !== 'free'} disabled={!selectedIds.length} onChange={e => updatePlacement({ anchor: e.target.checked ? 'nearest' : 'free' })} />Keep to edge</label>{(placement.anchor || 'free') !== 'free' && <><label>Edge<select aria-label="Edge" value={placement.anchor || 'nearest'} onChange={e => updatePlacement({ anchor: e.target.value })}>{[['nearest', 'Nearest original edge'], ['top', 'Top'], ['bottom', 'Bottom'], ['left', 'Left'], ['right', 'Right'], ['locked', 'Locked relative position']].map(([id, text]) => <option key={id} value={id}>{text}</option>)}</select></label><label>Edge margin (% of short side)<input type="number" min={0} max={20} step={.5} value={placement.margin ?? 2} onChange={e => updatePlacement({ margin: Math.max(0, Math.min(20, Number(e.target.value))) })} /></label></>}<label>Priority<select aria-label="Priority" value={mixedValue(selectedLayers, item => art.layerConstraints?.[item.id]?.priority || 'medium').mixed ? '' : (placement.priority || 'medium')} onChange={e => updatePlacement({ priority: e.target.value })}>{mixedValue(selectedLayers, item => art.layerConstraints?.[item.id]?.priority || 'medium').mixed && <option value="">Mixed</option>}{['critical', 'high', 'medium', 'low'].map(level => <option key={level} value={level}>{level[0].toUpperCase() + level.slice(1)}</option>)}</select></label><label>Inclusion<select aria-label="Inclusion" value={mixedValue(selectedLayers, item => art.layerConstraints?.[item.id]?.inclusion || 'include').mixed ? '' : (placement.inclusion || 'include')} onChange={e => updatePlacement({ inclusion: e.target.value })}>{mixedValue(selectedLayers, item => art.layerConstraints?.[item.id]?.inclusion || 'include').mixed && <option value="">Mixed</option>}<option value="include">Include</option><option value="exclude">Exclude</option></select></label></div>
           <details className="analyse-preservation"><summary>Placement & preservation</summary><div className="layer-behavior">
-            <label><input type="checkbox" checked={placement.required} onChange={e => updatePlacement({ required: e.target.checked })} />Required in every adaptation</label>
-            <label>Position<select value={placement.anchor} onChange={e => updatePlacement({ anchor: e.target.value })}>{[['free', 'Adapt freely'], ['nearest', 'Stay near original edge'], ['top', 'Top edge'], ['right', 'Right edge'], ['bottom', 'Bottom edge'], ['left', 'Left edge'], ['locked', 'Keep original position']].map(([id, label]) => <option key={id} value={id}>{label}</option>)}</select></label>
-            <label>Orientation<select value={placement.orientation} onChange={e => updatePlacement({ orientation: e.target.value })}><option value="preserve">Preserve original</option><option value="horizontal">Horizontal</option><option value="vertical">Vertical</option></select></label>
+            <label><input type="checkbox" checked={!!placement.required} onChange={e => updatePlacement({ required: e.target.checked })} />Required in every adaptation</label>
+            <label>Position<select value={placement.anchor || 'free'} onChange={e => updatePlacement({ anchor: e.target.value })}>{[['free', 'Adapt freely'], ['nearest', 'Stay near original edge'], ['top', 'Top edge'], ['right', 'Right edge'], ['bottom', 'Bottom edge'], ['left', 'Left edge'], ['locked', 'Keep original position']].map(([id, label]) => <option key={id} value={id}>{label}</option>)}</select></label>
+            <label>Orientation<select value={placement.orientation || 'preserve'} onChange={e => updatePlacement({ orientation: e.target.value })}><option value="preserve">Preserve original</option><option value="horizontal">Horizontal</option><option value="vertical">Vertical</option></select></label>
             <small>Edge placement applies to every role in calibration and batch layouts. Raster text retains its original orientation.</small>
           </div></details>
           <div className="tagger-controls"><button type="button" className="ghost" disabled={currentIndex === 0} onClick={() => choose(currentIndex - 1)}>← Previous</button><span>{currentIndex + 1} of {layers.length}</span><button type="button" className="ghost" disabled={currentIndex === layers.length - 1} onClick={() => choose(currentIndex + 1)}>Next →</button></div>
         </div>
       </div>
-    </div>
-    <aside className="analyse-layers" aria-label="Artwork layers">
       <div className="analyse-layers-heading"><h2>Layers</h2><span>{assigned} / {layers.length} confirmed</span></div>
       <div className="analyse-layer-list">{layers.map((item, index) => <div key={item.id} className="analyse-layer-row">
         <input type="checkbox" aria-label={`Select ${item.name}`} checked={selectedIds.includes(item.id)} onChange={() => choose(index, { ctrlKey: true, metaKey: false, shiftKey: false })} />
         <button type="button" aria-pressed={selectedIds.includes(item.id)} className={`analyse-layer ${selectedIds.includes(item.id) ? 'selected' : ''} ${item.effectiveHidden ? 'is-hidden' : ''}`} onClick={e => choose(index, e)}>
-          <LayerThumbnail layer={item} /><span className="analyse-layer-label"><strong>{item.name || 'Unnamed layer'}</strong><small>{TAGS.find(t => t[0] === art.an.roles.find(r => r.id === item.id)?.role)?.[1] || 'Unassigned'}{region?.layerId === item.id ? ' · Background area saved' : ''}{art.layerLinks?.some(link => link.layerIds.includes(item.id)) ? ' · Linked' : ''}</small></span>
+          <LayerThumbnail layer={item} /><span className="analyse-layer-label"><strong>{item.name || 'Unnamed layer'}</strong><small>{roleLabel(art.an.roles.find(r => r.id === item.id)?.role)}{art.an.roles.find(r => r.id === item.id)?.confidence === 1 ? '' : ' · suggested'}{region?.layerId === item.id ? ' · Background area saved' : ''}{art.layerLinks?.some(link => link.layerIds.includes(item.id)) ? ' · Linked' : ''}</small></span>
         </button>
         <button type="button" className="layer-eye ghost" aria-label={`${item.effectiveHidden ? 'Show' : 'Hide'} layer ${index + 1}`} title={item.effectiveHidden ? 'Show layer' : 'Hide layer'} onClick={() => visibility([item.id], item.effectiveHidden)}>{item.effectiveHidden ? 'Show' : 'Hide'}</button>
       </div>)}</div>

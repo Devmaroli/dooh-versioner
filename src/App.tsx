@@ -4,7 +4,8 @@ import { zipSync } from 'fflate'
 import { Calibration } from './Calibration'
 import { calibrationReady, screenProofKey, sourceSignature } from './layoutGuides.js'
 import { LayerTagger } from './AnalyseArtwork'
-import { availableRows, metadataFor, restoreMetadata, STEPS, validateFile, validateDimensions, workflowStatus } from './project.js'
+import { availableRows, metadataFor, restoreMetadata, STEP_LABELS, STEPS, validateFile, validateDimensions, workflowStatus } from './project.js'
+import { outputReadiness } from './layoutGuides.js'
 import { readProject, saveProject } from './storage.js'
 import { DEFAULT_ON, SCREENS } from './data/presets.js'
 import Adapt from './engine/adapt.js'
@@ -47,14 +48,16 @@ function TileView({row,screen,maxW,maxH,onClick,disabled}:{row:Row;screen:Screen
   const body=<><div ref={host}/>{!guideReady&&<p>Approve the layout guide for this screen in Adapt.</p>}{renderError&&<p role="alert">{renderError}</p>}<div className="cap">{row.lang} · {screen.name} {screen.w}×{screen.h}{master?` · ${master.name} (${master.lang||'lang?'})`:''}</div></>
   if(!onClick)return <div className="tile">{body}</div>
   const output=master?.calibration?.outputs?.[screenProofKey(screen)]
-  return <div className="adaptation-tile"><button type="button" className="tile" disabled={disabled||!guideReady} aria-label={`Artwork ${screen.name} ${row.lang}; double-click to refine`} onDoubleClick={onClick} onClick={e=>{if(e.detail===0)onClick()}}>{body}</button><button type="button" className="ghost" disabled={disabled||!guideReady} onClick={onClick}>Refine {screen.name} {row.lang}</button>{output&&<small>{output.approved&&output.sourceSignature===sourceSignature(master)?'Refinement approved':'Refinement needs approval'}</small>}</div>
+  const readiness = master ? outputReadiness(master, screen) : null
+  return <div className="adaptation-tile"><button type="button" className="tile" disabled={disabled||!guideReady} aria-label={`Artwork ${screen.name} ${row.lang}; double-click to refine`} onDoubleClick={onClick} onClick={e=>{if(e.detail===0)onClick()}}>{body}</button><button type="button" className="ghost" disabled={disabled||!guideReady} onClick={onClick}>Edit {screen.name} {row.lang}</button>{readiness&&<small className={`output-status status-${readiness.status === 'Needs review' ? 'review' : readiness.status.toLowerCase()}`}>{readiness.status}{readiness.issues.length ? ` · ${readiness.issues.length} ${readiness.issues.length === 1 ? 'finding' : 'findings'}` : ''}{output ? (output.approved && output.sourceSignature === sourceSignature(master) ? ' · output approved' : ' · output approval cleared') : ' · guide approval'}</small>}</div>
 }
 
 type Artwork = (typeof ARTS)[number]
 export function App() {
-  const [workspace, setWorkspace] = useState<'import' | 'analyse' | 'adapt' | 'review' | 'refine' | 'export'>('import')
+  const [workspace, setWorkspace] = useState<'import' | 'analyse' | 'adapt' | 'review' | 'export'>('import')
+  const [outputFilter, setOutputFilter] = useState<'all' | 'Ready' | 'Needs review' | 'Blocked'>('all')
+  const [selectionNoted, setSelectionNoted] = useState(false)
   const [tick, setTick] = useState(0)
-  const [batchActive, setBatchActive] = useState(false)
   const [query, setQuery] = useState('')
   const [analysisIndex,setAnalysisIndex] = useState(0)
   const [picked, setPicked] = useState<string[]>(DEFAULT_ON)
@@ -187,7 +190,20 @@ export function App() {
 
   async function exportZip() {
     if (!guidesReady) { setErr('Approve the selected layout families for every source before batch export.'); setWorkspace('adapt'); return }
-    if (!window.confirm('Export for review? Inspect every generated screen; guide approval does not guarantee production quality.')) return
+    const plan: { screen: Screen; row: Row; ready: ReturnType<typeof outputReadiness> }[] = []
+    for (const screen of selected) for (const row of rows) {
+      const master = masterFor(screen, row)
+      if (!master) continue
+      const ready = outputReadiness(master, screen)
+      const output = master.calibration?.outputs?.[screenProofKey(screen)]
+      if (output && (!output.approved || output.sourceSignature !== sourceSignature(master))) { setErr(`${screen.name}: approve this refined adaptation before exporting.`); return }
+      if (ready.status === 'Blocked') { setErr(`${screen.name} · ${row.lang} is blocked. ${ready.issues.find(issue => issue.blocked)?.message || 'Resolve the blocking finding before export.'}`); return }
+      plan.push({ screen, row, ready })
+    }
+    const reviewOnly = plan.filter(item => item.ready.status === 'Needs review')
+    const summary = plan.map(item => `${item.row.lang} ${item.screen.name} ${item.screen.w}×${item.screen.h}: ${item.ready.status}${item.ready.reviewCount ? ` (${item.ready.reviewCount} review)` : ''}`).join('\n')
+    if (!window.confirm(`${reviewOnly.length ? `${reviewOnly.length} output(s) still need visual review. Continuing records that acknowledgment.\n` : ''}${summary || 'No outputs to export.'}`)) return
+    for (const item of plan) { const art = masterFor(item.screen, item.row); if (art) art.exportAcknowledgement = { at: new Date().toISOString(), status: item.ready.status, findings: item.ready.issues.map(issue => issue.message) } }
     setBusy(true)
     setErr('')
     try {
@@ -255,65 +271,27 @@ export function App() {
               </label>
             ))}
           </div></section>
-  const selectionNotice = <div className="selection-notice" role="status"><strong>{selected.length===SCREENS.length?'All screens selected':selected.length?`Selection notice: ${selected.length} of ${SCREENS.length} screens selected`:'No screens selected'}</strong><p>{selected.length?'Only selected sizes will be adapted and exported. You can continue with this subset.':'Choose at least one screen to adapt.'}</p><details><summary>Check selected sizes ({selected.length})</summary><ul>{selected.map(s=><li key={s.name}>{s.name} · {s.w} × {s.h}</li>)}</ul></details><small>Available languages: {rows.map(r=>r.lang).join(', ')||'None assigned'}. Only matching source masters are used.</small></div>
+  const selectionNotice = <div className={`selection-notice${selectionNoted ? ' is-noted' : ''}`} role="status"><strong>{selected.length ? `${selected.length} ${selected.length === 1 ? 'screen' : 'screens'} selected for this job.` : 'No screens selected'}</strong><p>{selected.length ? 'Only these sizes will be adapted and exported.' : 'Choose at least one screen to adapt.'}</p><details><summary>Check selected sizes ({selected.length})</summary><ul>{selected.map(s=><li key={s.name}>{s.name} · {s.w} × {s.h}</li>)}</ul></details><small>Available languages: {rows.map(r=>r.lang).join(', ')||'None assigned'}. Only matching source masters are used. A subset is a valid job.</small>{selected.length > 0 && selected.length !== SCREENS.length && <button type="button" className="ghost" onClick={() => setSelectionNoted(true)}>{selectionNoted ? 'Selection acknowledged' : 'Acknowledge selection'}</button>}</div>
   return (
     <>
       <header>
         <b>DOOH Creative Studio</b>
         <span className="app-version" aria-label={`Version ${APP_VERSION}`}>v{APP_VERSION}</span>
-        <nav className="workspace-tabs" aria-label="Creative workflow">{STEPS.map((step,i)=><button key={step} type="button" className={workspace===step?'active':''} disabled={busy || importingNow || !restored || (['review','refine','export'].includes(step) && !guidesReady) || ['Not ready','Not implemented'].includes(workflowStatus(step,ARTS,selected.length))} title={workflowStatus(step,ARTS,selected.length)} onClick={()=>setWorkspace(step as typeof workspace)} aria-current={workspace===step?'step':undefined}>{i+1} · {step[0].toUpperCase()+step.slice(1)} {workflowStatus(step,ARTS,selected.length)==='Complete'?'✓':workflowStatus(step,ARTS,selected.length)==='Needs attention'?'!':''}</button>)}</nav>
+        <nav className="workspace-tabs" aria-label="Creative workflow">{STEPS.map((step,i)=><button key={step} type="button" className={workspace===step?'active':''} disabled={busy || importingNow || !restored || (['review','export'].includes(step) && !guidesReady) || ['Not ready','Not implemented'].includes(workflowStatus(step,ARTS,selected.length))} title={workflowStatus(step,ARTS,selected.length)} onClick={()=>setWorkspace(step as typeof workspace)} aria-current={workspace===step?'step':undefined}>{i+1} · {STEP_LABELS[step as keyof typeof STEP_LABELS]} {workflowStatus(step,ARTS,selected.length)==='Complete'?'✓':workflowStatus(step,ARTS,selected.length)==='Needs attention'?'!':''}</button>)}</nav>
         <span className="chip" role="status">{saveStatus}</span>
         <span className="spacer" />
         <button type="button" className="ghost" disabled={!guidesReady || !selected.length || !rows.length || busy || importingNow || !restored} onClick={exportZip}>
           {busy ? 'Exporting…' : exportFormat==='png' ? 'Export review ZIP' : `Export ${exportFormat.toUpperCase()} ZIP`}
         </button>
       </header>
-      {workspace === "import" ? <section className="import-studio"><div className="import-heading"><span className="eyebrow">STEP 01 / CREATIVE PREPARATION</span><h1>Start with a great master.</h1><p>Bring English and Arabic artwork together. Check what was imported before adapting to any screen.</p></div><div className="import-columns"><div className="import-card import-upload" onDragOver={(e) => e.preventDefault()} onDrop={(e) => {e.preventDefault(); if(e.dataTransfer.files.length) void takeFiles(e.dataTransfer.files)}}><div className="import-icon">↑</div><h2>Drop your creative masters</h2><p>PSD, PSB, SVG, PNG, JPG or WebP · Multiple files supported</p><label className="import-file-button">Choose artwork<input disabled={busy || importingNow || !restored} type="file" multiple accept=".png,.jpg,.jpeg,.webp,.svg,.psd,.psb" onChange={(e) => {if(e.target.files?.length) void takeFiles(e.target.files); e.target.value=""}} /></label><p className="import-tip">Tip: Name files with _EN or _AR to map languages automatically.</p><div className="sample-actions"><button type="button" className="ghost" disabled={busy || importingNow || !restored} onClick={() => void sample('svg')}>Try sample SVG</button><button type="button" className="ghost" disabled={busy || importingNow || !restored} onClick={() => void sample('psd')}>Try sample PSD</button></div></div><div className="import-card"><div className="import-card-top"><h2>Imported masters</h2><span className="chip">{ARTS.length} assets</span></div>{ARTS.length ? <div className="import-assets">{ARTS.map((art,i)=><div className="import-asset" key={art.id}><span className="asset-mark">▧</span><div><strong>{art.name}</strong><small>{art.a.w} × {art.a.h} px · {art.a.source?.format?.toUpperCase()} · {art.a.source?.format === "image" ? "Flattened" : "Layered"} · Imported</small></div><select aria-label={`Language for ${art.name}`} value={art.lang} onChange={e=>{art.lang=e.target.value;setFocus(null);setTick(n=>n+1)}}><option value="">Assign language</option><option value="EN">English</option><option value="AR">Arabic</option></select><button type="button" className="remove-master" aria-label={`Remove ${art.name}`} title={`Remove ${art.name}`} disabled={busy || importingNow || !restored} onClick={()=>removeArtwork(art)}>✕ Remove</button></div>)}</div> : <div className="import-empty">No artwork imported yet. Your files will appear here for review.</div>}<div className="import-checks"><h3>Preflight</h3><p>✓ Supported formats: PSD / PSB / SVG / raster</p><p>{ARTS.some(a=>a.lang==="EN")?"✓":"○"} English master {ARTS.some(a=>a.lang==="EN")?"detected":"not detected"}</p><p>{ARTS.some(a=>a.lang==="AR")?"✓":"○"} Arabic master {ARTS.some(a=>a.lang==="AR")?"detected":"not detected"}</p><small>Language suggestions may be wrong. Confirm each assignment above. Missing languages will not be exported.</small></div></div></div>{progress&&<p role="status" className="progress-status">{progress}</p>}{importingNow&&<button type="button" className="ghost" onClick={()=>{cancelled.current=true;setProgress("Stopping after current synchronous operation…")}}>Stop remaining imports</button>}{err && <p className="err">{err}</p>}<details className="import-targets"><summary>Choose target screens · {selected.length} selected</summary>{screenPicker}</details>{selectionNotice}<div className="import-footer"><span>{ARTS.length ? `${ARTS.length} master(s) ready to preview` : "Import artwork to begin"}</span><button type="button" className="ghost" disabled={busy||importingNow||!restored||!selected.length||workflowStatus("adapt",ARTS,selected.length)==="Not ready"} onClick={()=>setWorkspace("adapt")}>Go ahead and adapt →</button><button type="button" disabled={importingNow || workflowStatus("analyse",ARTS,selected.length)==="Not ready"} onClick={() => setWorkspace("analyse")}>Continue to Analyse →</button></div></section> : <div className="studio-workspace"><section className="studio-intro"><span className="eyebrow">CREATIVE WORKFLOW / {workspace.toUpperCase()}</span><h1>{workspace==='analyse'?'Understand the original artwork':workspace==='adapt'?'Adapt to every screen':workspace==='review'?'Review every composition':workspace==='refine'?'Refine with original assets only':'Export selected creatives'}</h1><p>{workspace==='analyse'?'Inspect detected source masters and their languages before adapting.':workspace==='adapt'?'Adjust the layout families required by your selected screens, then adapt only those sizes.':workspace==='review'?'Double-click each preview to refine its layers, then check hierarchy, clipping and readability.':workspace==='refine'?'Double-click an adaptation, or choose Refine, to edit its layers, placement and appearance. Changes belong only to that screen and source master.':'Export exact-resolution PNG, PDF or layered PSD files for the selected screens.'}</p>{workspace==='analyse'&&ARTS.length>0&&<div className="analysis-picker"><label htmlFor="artwork-to-tag">Artwork to analyse</label><select id="artwork-to-tag" value={Math.min(analysisIndex,ARTS.length-1)} onChange={e=>setAnalysisIndex(Number(e.target.value))}>{ARTS.map((art,i)=><option value={i} key={i}>{art.name}</option>)}</select><LayerTagger key={ARTS[Math.min(analysisIndex,ARTS.length-1)].id} art={ARTS[Math.min(analysisIndex,ARTS.length-1)]} onChange={()=>setTick(n=>n+1)}/></div>}{workspace==='analyse'&&<div className="analysis-summary">{ARTS.map((art,i)=><div key={i} className="analysis-card"><strong>{art.name}</strong><span>{art.a.w} × {art.a.h} · {art.lang||'Language unknown'}</span><span>{art.an?.roles?.length||0} classified layer roles</span><span>{art.an?.warnings?.length||0} analysis warnings</span></div>)}</div>}{(workspace==='adapt'||workspace==='export')&&selectionNotice}{workspace==='adapt'&&<details className="adapt-targets"><summary>Change target screens</summary>{screenPicker}</details>}{workspace==='export'&&<div className="export-options"><label>Export format<select aria-label="Export format" value={exportFormat} disabled={busy} onChange={e=>setExportFormat(e.target.value as typeof exportFormat)}><option value="png">PNG</option><option value="pdf">PDF · full-resolution image</option><option value="psd">PSD · layers + original source</option></select></label>
-        {exportFormat==='png'&&<label><input type="checkbox" checked={transparentPng} disabled={busy} onChange={e=>setTransparentPng(e.target.checked)}/>Transparent background</label>}</div>}{workspace==='export'&&<p>{exportFormat==='psd'?'Adapted layers retain blend modes and opacity. Masks, fill and effects are baked into adapted pixels. Native PSD layers and embedded Illustrator objects remain in a hidden original-source folder. Check the file in Photoshop before production.':exportFormat==='pdf'?'PDF embeds a lossless full-resolution image per screen. Page units map pixels at 72 ppi; physical print dimensions are not specified.':'PNG uses lossless compression and exact screen dimensions. Transparent background hides only the identified background layer.'}</p>}{workspace==='export'&&<button type="button" disabled={!guidesReady||!selected.length||!rows.length||busy||importingNow||!restored} onClick={exportZip}>{busy?'Exporting…':`Export review ${exportFormat.toUpperCase()}s as ZIP`}</button>}<div className="workflow-actions"><button type="button" className="ghost" onClick={()=>setWorkspace('import')}>← Manage files</button>{workspace!=='export'&&<button type="button" disabled={busy || importingNow || !selected.length || (workspace==='adapt' && !guidesReady)} onClick={()=>setWorkspace(workspace==='analyse'?'adapt':workspace==='adapt'?'review':workspace==='review'?'refine':'export')}>{workspace==='review'?'Refine adaptations →':'Next step →'}</button>}</div></section>{workspace==='adapt'&&ARTS.length>0&&<><div className="calibration-master"><label>Master to calibrate<select aria-label="Master to calibrate" value={Math.min(analysisIndex,ARTS.length-1)} onChange={e=>setAnalysisIndex(Number(e.target.value))}>{ARTS.map((art,i)=><option key={art.id} value={i}>{art.name} · {art.lang}</option>)}</select></label></div><Calibration key={ARTS[Math.min(analysisIndex,ARTS.length-1)].id} art={ARTS[Math.min(analysisIndex,ARTS.length-1)]} onChange={()=>setTick(n=>n+1)} onBatch={()=>setBatchActive(true)} targetScreens={selected}/></>}{workspace!=='analyse'&&(workspace!=='adapt'||batchActive&&guidesReady)&&<div className="layout">
+      {workspace === "import" ? <section className="import-studio"><div className="import-heading"><span className="eyebrow">STEP 01 / CREATIVE PREPARATION</span><h1>Start with a great master.</h1><p>Bring English and Arabic artwork together. Check what was imported before adapting to any screen.</p></div><div className="import-columns"><div className="import-card import-upload" onDragOver={(e) => e.preventDefault()} onDrop={(e) => {e.preventDefault(); if(e.dataTransfer.files.length) void takeFiles(e.dataTransfer.files)}}><div className="import-icon">↑</div><h2>Drop your creative masters</h2><p>PSD, PSB, SVG, PNG, JPG or WebP · Multiple files supported</p><label className="import-file-button">Choose artwork<input disabled={busy || importingNow || !restored} type="file" multiple accept=".png,.jpg,.jpeg,.webp,.svg,.psd,.psb" onChange={(e) => {if(e.target.files?.length) void takeFiles(e.target.files); e.target.value=""}} /></label><p className="import-tip">Tip: Name files with _EN or _AR to map languages automatically.</p><div className="sample-actions"><button type="button" className="ghost" disabled={busy || importingNow || !restored} onClick={() => void sample('svg')}>Try sample SVG</button><button type="button" className="ghost" disabled={busy || importingNow || !restored} onClick={() => void sample('psd')}>Try sample PSD</button></div></div><div className="import-card"><div className="import-card-top"><h2>Imported masters</h2><span className="chip">{ARTS.length} assets</span></div>{ARTS.length ? <div className="import-assets">{ARTS.map((art,i)=><div className="import-asset" key={art.id}><span className="asset-mark">▧</span><div><strong>{art.name}</strong><small>{art.a.w} × {art.a.h} px · {art.a.source?.format?.toUpperCase()} · {art.a.source?.format === "image" ? "Flattened" : "Layered"} · Imported</small></div><select aria-label={`Language for ${art.name}`} value={art.lang} onChange={e=>{art.lang=e.target.value;setFocus(null);setTick(n=>n+1)}}><option value="">Assign language</option><option value="EN">English</option><option value="AR">Arabic</option></select><button type="button" className="remove-master" aria-label={`Remove ${art.name}`} title={`Remove ${art.name}`} disabled={busy || importingNow || !restored} onClick={()=>removeArtwork(art)}>✕ Remove</button></div>)}</div> : <div className="import-empty">No artwork imported yet. Your files will appear here for review.</div>}<div className="import-checks"><h3>Preflight</h3><p>✓ Supported formats: PSD / PSB / SVG / raster</p><p>{ARTS.some(a=>a.lang==="EN")?"✓":"○"} English master {ARTS.some(a=>a.lang==="EN")?"detected":"not detected"}</p><p>{ARTS.some(a=>a.lang==="AR")?"✓":"○"} Arabic master {ARTS.some(a=>a.lang==="AR")?"detected":"not detected"}</p><small>Language suggestions may be wrong. Confirm each assignment above. Missing languages will not be exported.</small></div></div></div>{progress&&<p role="status" className="progress-status">{progress}</p>}{importingNow&&<button type="button" className="ghost" onClick={()=>{cancelled.current=true;setProgress("Stopping after current synchronous operation…")}}>Stop remaining imports</button>}{err && <p className="err">{err}</p>}<details className="import-targets"><summary>Choose target screens · {selected.length} selected</summary>{screenPicker}</details>{selectionNotice}<div className="import-footer"><span>{ARTS.length ? `${ARTS.length} master(s) ready to preview` : "Import artwork to begin"}</span><button type="button" className="ghost" disabled={busy||importingNow||!restored||!selected.length||workflowStatus("adapt",ARTS,selected.length)==="Not ready"} onClick={()=>setWorkspace("adapt")}>Go ahead and adapt →</button><button type="button" disabled={importingNow || workflowStatus("analyse",ARTS,selected.length)==="Not ready"} onClick={() => setWorkspace("analyse")}>Continue to Analyse →</button></div></section> : <div className="studio-workspace"><section className="studio-intro"><span className="eyebrow">CREATIVE WORKFLOW / {workspace.toUpperCase()}</span><h1>{workspace==='analyse'?'Understand the original artwork':workspace==='adapt'?'Adapt the selected screens':workspace==='review'?'Review and edit outputs':'Export selected creatives'}</h1><p>{workspace==='analyse'?'Confirm what each layer is. Suggestions stay unconfirmed until you choose a role.':workspace==='adapt'?'Approve a guide only for the families your selected screens need.':workspace==='review'?'One stage for every output. Double-click or choose Edit. Saving an edit does not approve it, and editing an approved output clears that approval.':'Choose PNG, PDF or layered PSD. Blocked outputs stay here. Review-only findings need an explicit acknowledgment.'}</p>{workspace==='analyse'&&ARTS.length>0&&<div className="analysis-picker"><label htmlFor="artwork-to-tag">Artwork to analyse</label><select id="artwork-to-tag" value={Math.min(analysisIndex,ARTS.length-1)} onChange={e=>setAnalysisIndex(Number(e.target.value))}>{ARTS.map((art,i)=><option value={i} key={i}>{art.name}</option>)}</select><LayerTagger key={ARTS[Math.min(analysisIndex,ARTS.length-1)].id} art={ARTS[Math.min(analysisIndex,ARTS.length-1)]} onChange={()=>setTick(n=>n+1)}/></div>}{workspace==='analyse'&&<div className="analysis-summary">{ARTS.map((art,i)=><div key={i} className="analysis-card"><strong>{art.name}</strong><span>{art.a.w} × {art.a.h} · {art.lang||'Language unknown'}</span><span>{art.an?.roles?.length||0} classified layer roles</span><span>{art.an?.warnings?.length||0} analysis warnings</span></div>)}</div>}{(workspace==='adapt'||workspace==='export')&&selectionNotice}{workspace==='adapt'&&<details className="adapt-targets"><summary>Change target screens</summary>{screenPicker}</details>}{workspace==='export'&&<div className="export-options"><label>Export format<select aria-label="Export format" value={exportFormat} disabled={busy} onChange={e=>setExportFormat(e.target.value as typeof exportFormat)}><option value="png">PNG</option><option value="pdf">PDF · full-resolution image</option><option value="psd">PSD · layers + original source</option></select></label>
+        {exportFormat==='png'&&<label><input type="checkbox" checked={transparentPng} disabled={busy} onChange={e=>setTransparentPng(e.target.checked)}/>Transparent background</label>}</div>}{workspace==='export'&&<p>{exportFormat==='psd'?'Adapted layers retain blend modes and opacity. Masks, fill and effects are baked into adapted pixels. Native PSD layers and embedded Illustrator objects remain in a hidden original-source folder. Check the file in Photoshop before production.':exportFormat==='pdf'?'PDF embeds a lossless full-resolution image per screen. Page units map pixels at 72 ppi; physical print dimensions are not specified.':'PNG uses lossless compression and exact screen dimensions. Transparent background hides only the identified background layer.'}</p>}{workspace==='export'&&err&&<p className="err" role="alert">{err}</p>}<div className="workflow-actions"><button type="button" className="ghost" onClick={()=>setWorkspace('import')}>← Manage files</button>{workspace!=='export'&&<button type="button" disabled={busy || importingNow || !selected.length || (workspace==='adapt' && !guidesReady) || (workspace==='review' && !guidesReady)} onClick={()=>setWorkspace(workspace==='analyse'?'adapt':workspace==='adapt'?'review':'export')}>{workspace==='review'?'Export →':'Next step →'}</button>}</div></section>{workspace==='adapt'&&ARTS.length>0&&<><div className="calibration-master"><label>Master to calibrate<select aria-label="Master to calibrate" value={Math.min(analysisIndex,ARTS.length-1)} onChange={e=>setAnalysisIndex(Number(e.target.value))}>{ARTS.map((art,i)=><option key={art.id} value={i}>{art.name} · {art.lang}</option>)}</select></label></div><Calibration key={ARTS[Math.min(analysisIndex,ARTS.length-1)].id} art={ARTS[Math.min(analysisIndex,ARTS.length-1)]} onChange={()=>setTick(n=>n+1)} onBatch={()=>setWorkspace('review')} targetScreens={selected}/></>}{workspace==='export'&&<div className="export-readiness" aria-live="polite">{selected.flatMap(screen => rows.map(row => { const master = masterFor(screen, row); const ready = master ? outputReadiness(master, screen) : null; return <p key={screen.name + row.lang}>{!master || !ready?.guideReady ? 'Approve the layout guide for this screen in Adapt.' : `${ready.status} · ${row.lang} · ${screen.name} ${screen.w}×${screen.h}${ready.issues.length ? ` · ${ready.issues.length} findings` : ''}`}</p> }))}{screenPicker}</div>}{workspace==='review'&&<div className="layout review-layout">
         <aside>
-          <div
-            className="drop"
-            onDragOver={(e) => e.preventDefault()}
-            onDrop={(e) => {
-              e.preventDefault()
-              if (e.dataTransfer.files.length) void takeFiles(e.dataTransfer.files)
-            }}
-          >
-            <b>Drop masters</b>
-            <div>PNG, JPG, SVG, or PSD. Language comes from the filename suffix (_EN, _AR, عربي).</div>
-            <input
-              type="file"
-              multiple
-              accept=".png,.jpg,.jpeg,.webp,.svg,.psd,.psb"
-              onChange={(e) => {
-                if (e.target.files?.length) void takeFiles(e.target.files)
-                e.target.value = ''
-              }}
-            />
-            <div style={{ marginTop: 8, display: 'flex', gap: 6, justifyContent: 'center' }}>
-              <button type="button" className="ghost" disabled={busy || importingNow || !restored} onClick={() => void sample('svg')}>
-                Sample SVG
-              </button>
-              <button type="button" className="ghost" disabled={busy || importingNow || !restored} onClick={() => void sample('psd')}>
-                Sample PSD
-              </button>
-            </div>
-          </div>
           {err ? <p className="err">{err}</p> : null}
-          <h2>Masters ({ARTS.length})</h2>
-          <div className="masters" data-tick={tick}>
-            {ARTS.length === 0 ? <div className="cap">No master yet. Tiles use the built-in template until you upload.</div> : null}
-            {ARTS.map((art) => (
-              <div className="master" key={art.id}>
-                <div>{art.name}</div>
-                <span className={'chip ' + (art.lang || '')}>{art.lang || 'no suffix'}</span>
-                <span className="chip">
-                  {art.a.w}×{art.a.h}
-                </span>
-              </div>
-            ))}
-          </div>
-          {workspace!=='adapt'&&screenPicker}
+          <h2>Outputs</h2>
+          <label>Status<select aria-label="Output status filter" value={outputFilter} onChange={e => setOutputFilter(e.target.value as typeof outputFilter)}><option value="all">All statuses</option><option value="Ready">Ready</option><option value="Needs review">Needs review</option><option value="Blocked">Blocked</option></select></label>
+          <p className="cap">Guide approval and output approval are separate. Back returns here with this filter intact.</p>
+          <div className="masters" data-tick={tick}>{ARTS.map(art => <div className="master" key={art.id}><div>{art.name}</div><span className={'chip ' + (art.lang || '')}>{art.lang || 'no suffix'}</span></div>)}</div>
         </aside>
         <main>
           <div className="grid">
@@ -323,17 +301,12 @@ export function App() {
                   {screen.name} {screen.w}×{screen.h}
                 </h3>
                 <div className="tiles">
-                  {rows.map((row) => (
-                    <TileView
-                      key={row.version_id}
-                      row={row}
-                      screen={screen}
-                      maxW={300}
-                      maxH={180}
-                      disabled={busy}
-                      onClick={() => setFocus({ row, screen })}
-                    />
-                  ))}
+                  {rows.map((row) => {
+                    const master = masterFor(screen, row)
+                    const status = master ? outputReadiness(master, screen).status : 'Blocked'
+                    if (outputFilter !== 'all' && status !== outputFilter) return null
+                    return <TileView key={row.version_id} row={row} screen={screen} maxW={300} maxH={180} disabled={busy} onClick={() => setFocus({ row, screen })} />
+                  })}
                 </div>
               </div>
             ))}
@@ -342,7 +315,7 @@ export function App() {
       </div>}</div>
       }
       {busy&&progress&&<p role="status" className="progress-status">{progress}</p>}
-      {focus && masterFor(focus.screen,focus.row) ? <Calibration key={masterFor(focus.screen,focus.row).id+screenProofKey(focus.screen)} art={masterFor(focus.screen,focus.row)} targetScreen={focus.screen} onClose={()=>setFocus(null)} onChange={()=>setTick(n=>n+1)} /> : null}
+      {focus && masterFor(focus.screen,focus.row) ? <Calibration key={masterFor(focus.screen,focus.row).id+screenProofKey(focus.screen)} art={masterFor(focus.screen,focus.row)} targetScreen={focus.screen} onClose={()=>setFocus(null)} onChange={()=>setTick(n=>n+1)} outputPosition={`${Math.max(0, selected.flatMap(screen => rows.map(row => screen.name + row.lang)).indexOf(focus.screen.name + focus.row.lang)) + 1} of ${selected.length * rows.length}`} onPrevious={() => { const entries = selected.flatMap(screen => rows.map(row => ({ screen, row }))); const index = entries.findIndex(entry => entry.screen.name === focus.screen.name && entry.row.lang === focus.row.lang); if (index > 0) setFocus(entries[index - 1]) }} onNext={() => { const entries = selected.flatMap(screen => rows.map(row => ({ screen, row }))); const index = entries.findIndex(entry => entry.screen.name === focus.screen.name && entry.row.lang === focus.row.lang); if (index >= 0 && index < entries.length - 1) setFocus(entries[index + 1]) }} /> : null}
     </>
   )
 }

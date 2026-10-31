@@ -101,30 +101,17 @@ export function mixedValue(items, read) {
 }
 
 export function migrateMetadata(metadata = {}) {
+  // Keep stored constraints byte-for-byte. Adding default keys would change the guide signature and clear approvals.
   const roles = (metadata.roles || []).map(role => ({
     ...role,
     role: canonicalRole(role.role),
     confirmed: !!(role.confirmed || role.confidence === 1),
   }))
-  const layerConstraints = {}
-  for (const [id, raw] of Object.entries(metadata.layerConstraints || {})) {
-    const constraint = raw || {}
-    const role = roles.find(item => item.id === id)
-    layerConstraints[id] = emptyConstraint({
-      ...constraint,
-      required: !!constraint.required,
-      anchor: constraint.anchor || 'free',
-      orientation: constraint.orientation || 'preserve',
-      priority: constraint.priority || (constraint.required ? 'high' : 'medium'),
-      inclusion: constraint.inclusion || (isExcludedRole(role?.role) ? 'exclude' : 'include'),
-      graphicSubtype: constraint.graphicSubtype || (canonicalRole(role?.role) === 'border' ? 'border' : null),
-    })
-  }
   return {
     ...metadata,
     schemaVersion: 2,
     roles,
-    layerConstraints,
+    layerConstraints: metadata.layerConstraints || {},
     layerLinks: metadata.layerLinks || [],
     layerVisibility: metadata.layerVisibility || {},
     editorHistory: metadata.editorHistory || null,

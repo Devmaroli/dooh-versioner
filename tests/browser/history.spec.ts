@@ -49,7 +49,7 @@ test('linked untagged IKEA source can prepare border and independent words in on
   await page.getByRole('button', { name: 'Undo', exact: true }).click()
   await expect(page.locator('.editor-layer-row').filter({ hasText: /Word [0-9]+ · embedded vector/ })).toHaveCount(0)
   await expect(page.getByRole('button', { name: /Original border.*Vector rectangle/ })).toHaveCount(0)
-  await expect(page.locator('.editor-layer-row').filter({ hasText: 'Linked product · 2 layers' })).toHaveCount(1)
+  await expect(page.locator('.editor-layer-row').filter({ hasText: 'Linked unassigned · 2 layers' })).toHaveCount(1)
   await page.getByRole('button', { name: 'Redo', exact: true }).click()
   await expect(page.locator('.editor-layer-row').filter({ hasText: /Word [0-9]+ · embedded vector/ })).toHaveCount(5)
   await page.screenshot({ path: 'work/history-prepared-headline.png' })

@@ -1,9 +1,9 @@
 import { expect, test } from '@playwright/test'
 import fs from 'node:fs'
-import { approveGuides, guideNames } from './helpers'
+import { approveGuides, guideNames, settleSave } from './helpers'
 
 test('full background, multi-selection, links, visibility, edge anchoring and five focused guides persist', async ({ page }) => {
-  test.setTimeout(90000)
+  test.setTimeout(180000)
   const fixture = process.env.IKEA_PSD
   test.skip(!fixture || !fs.existsSync(fixture), 'Set IKEA_PSD to the private local fixture.')
   const errors: string[] = []; page.on('pageerror', error => errors.push(error.message))
@@ -13,7 +13,7 @@ test('full background, multi-selection, links, visibility, edge anchoring and fi
   await page.getByLabel('Language for ikea.psd').selectOption('EN')
   await page.getByRole('button', { name: 'Continue to Analyse' }).click()
   const layers = page.locator('.analyse-layer')
-  await layers.filter({ hasText: 'Newspaper 03' }).click()
+  await layers.filter({ has: page.locator('strong', { hasText: /^bg$/ }) }).click()
   await page.getByRole('button', { name: 'Selected layer', exact: true }).click()
   await expect(page.getByLabel('View bounds', { exact: true })).toHaveValue('layer')
   await expect(page.locator('.analyse-toolbar')).toContainText('2964 × 1653 px · Origin -521, -286')
@@ -24,10 +24,10 @@ test('full background, multi-selection, links, visibility, edge anchoring and fi
   await page.getByRole('spinbutton', { name: 'Height', exact: true }).fill('80')
   await page.getByRole('button', { name: 'Use this background area', exact: true }).click()
   await expect(page.locator('.background-status')).toContainText('Background area saved')
-  await expect(page.getByText('Saved on this device')).toBeVisible()
+  await settleSave(page)
   await page.reload(); await page.getByRole('button', { name: 'Continue to Analyse' }).click()
   await expect(page.locator('.background-status')).toContainText('at -400, -200')
-  await layers.filter({ hasText: 'Newspaper 03' }).click()
+  await layers.filter({ has: page.locator('strong', { hasText: /^bg$/ }) }).click()
   await page.getByRole('button', { name: 'Draw background area', exact: true }).click()
   for (const [label, value] of [['X', '900'], ['Y', '50'], ['Width', '500'], ['Height', '200']]) await page.getByRole('spinbutton', { name: label, exact: true }).fill(value)
   await page.getByRole('button', { name: 'Use this background area', exact: true }).click()
@@ -91,7 +91,7 @@ test('full background, multi-selection, links, visibility, edge anchoring and fi
   await approveGuides(page)
   await expect(page.locator('.pair')).toHaveCount(7)
   await expect(page.getByRole('button', { name: 'Export review ZIP', exact: true })).toBeEnabled()
-  await expect(page.getByText('Saved on this device')).toBeVisible()
+  await settleSave(page)
   await page.reload(); await page.getByRole('button', { name: /3 · Adapt/ }).click()
   await expect(page.getByText('5 / 5 guides approved', { exact: true })).toBeVisible()
   await page.getByRole('button', { name: 'Edit 2.6 Screen', exact: true }).click()

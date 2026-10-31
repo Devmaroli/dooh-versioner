@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.7.0 — 2026-10-31
+
+- Five stages: Import, Analyse, Adapt, Review & edit, and Export. Review and Refine are one stage with an output overview and a focused editor.
+- Tags keep role, requirement, priority, placement and inclusion separate. Confirmed roles override suggestions. Unrecognised images stay unresolved instead of being called the key visual.
+- Review cards show Ready, Needs review or Blocked with finding counts. Hard failures block export. Review-only findings need a recorded acknowledgment.
+- Projects save as version 2 and still open version 1 metadata.
+
 ## 1.6.0 — 2026-10-31
 
 - Refine each generated screen independently with the complete layer editor; approve and export the same persisted layout.

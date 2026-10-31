@@ -48,7 +48,7 @@ test('lossless PNG/PDF and layered PSD preserve resolution, transparency, native
   await page.getByRole('button', { name: 'Select layer Top headline', exact: true }).click()
   for (const [label, value] of [['Width (%)', '50'], ['X position (%)', '10'], ['Y position (%)', '10']]) await page.getByLabel(label, { exact: true }).fill(value)
   await page.getByRole('button', { name: 'Back to layout previews', exact: false }).click(); await approveGuides(page)
-  await page.getByRole('button', { name: /6 · Export/ }).click()
+  await page.getByRole('button', { name: /5 · Export/ }).click()
   // Export one real preset, never a test-only dimension.
   while (await page.locator('.screens input[type=checkbox]:checked').count()) await page.locator('.screens input[type=checkbox]:checked').first().uncheck()
   await page.locator('.screens label').filter({ hasText: 'Alshaheed - Mupi 1080×1920' }).getByRole('checkbox').check()
