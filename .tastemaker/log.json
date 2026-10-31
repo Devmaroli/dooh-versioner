@@ -54,5 +54,13 @@
     "palette": "existing application",
     "status": "pending-review",
     "reason": "User requested seven undo actions and default move/scale. Live inspection found an unconfirmed headline and a hidden generated-border stack condition; source preparation is now visible and undoable."
+  },
+  {
+    "date": "2026-10-31",
+    "scope": "Analyse source canvas and tagging/layers rails",
+    "structure": "left source canvas with tool strip; two resizable collapsible right rails",
+    "palette": "existing dark surfaces and #3b6fe0 accent",
+    "status": "pending-review",
+    "reason": "Explicit user layout; source-pixel selection, source properties and nested role-tagged rows."
   }
 ]

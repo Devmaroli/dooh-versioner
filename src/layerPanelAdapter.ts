@@ -48,6 +48,7 @@ export function sourcePanel(art: any): LayerPanelState {
         sourceIds: [layer.id], memberIds: group ? [] : [layer.id], importedGroup: group || undefined,
         expanded: group ? expanded[id] !== false : undefined,
         role: art.an?.roles?.find((role: { id: string; role: string }) => role.id === layer.id)?.role,
+        roleSuggested: art.an?.roles?.some((role: any) => role.id === layer.id && role.confidence !== 1 && !role.confirmed),
         sourceLink: linked.has(layer.id),
       })
       if (group) walk(layer.children, id)

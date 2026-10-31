@@ -1,11 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import type { PointerEvent } from 'react'
+import type { CSSProperties, PointerEvent } from 'react'
 import './analyse.css'
 import { splitSourceWords } from './words.js'
 import { detectSourceBorder, borderInterior } from './border.js'
 import { allLayers, drawSourceLayers, unionBounds, selectLayers, linkLayers, unlinkLayers, setLayerVisibility } from './artwork.js'
 import { backgroundCrop, invalidateBackground, rectangleBetween } from './background.js'
 import { ROLE_CONTROL_LABELS, canonicalRole, mixedValue, patchConstraints, roleLabel } from './tagging.js'
+import { AnalysePanel } from './AnalysePanel'
 import { LayersPanel } from './LayersPanel'
 import { sourcePanel } from './layerPanelAdapter'
 import { descendants, reducePanel } from './layerPanelModel'
@@ -14,7 +15,7 @@ import { prepareAnyLayer } from './sourceText.js'
 type Rect = { x: number; y: number; w: number; h: number }
 type Layer = { id: string; name?: string; kind?: string; hidden?: boolean; box?: number[]; px?: HTMLCanvasElement; children?: Layer[] }
 type Region = Rect & { layerId: string; scope?: string }
-type Constraint = { required?: boolean; anchor?: string; orientation?: string; margin?: number; protectedLogo?: boolean; priority?: string; inclusion?: string; graphicSubtype?: string; allowSplit?: boolean }
+type Constraint = { required?: boolean; anchor?: string; orientation?: string; margin?: number; protectedLogo?: boolean; priority?: string; inclusion?: string; graphicSubtype?: string; allowSplit?: boolean; cropPolicy?: string }
 type Art = {
   a: { w: number; h: number; layers: Layer[]; composite?: HTMLCanvasElement; source?: { format?: string } }
   an: { roles: { id: string; role: string; why?: string; confidence?: number; confirmed?: boolean }[] }
@@ -25,7 +26,8 @@ type Art = {
   layerCrops?: Record<string, Rect>
   layerVisibility?: Record<string, boolean>
   layerLinks?: { id: string; layerIds: string[] }[]
-  previewSettings?: { alpha?: boolean; color?: string; layerThumbnailSize?: 48 | 100 | 200 | 300 }
+  lang?: string
+  previewSettings?: { analysePanels?: { tagging: number; layers: number; taggingCollapsed: boolean; layersCollapsed: boolean }; alpha?: boolean; color?: string; layerThumbnailSize?: 48 | 100 | 200 | 300 }
   layerPanel?: any
   groupExpanded?: Record<string, boolean>
   preparationGroups?: { id: string; name: string; layerIds: string[]; source?: string }[]
@@ -54,6 +56,15 @@ function LayerThumbnail({ layer }: { layer: Layer }) {
 
 export function LayerTagger({ art, onChange, onRelink }: { art: Art; onChange: () => void; onRelink?: (files: FileList) => void }) {
   const layers = useMemo(() => allLayers(art).filter(l => !l.children?.length && l.box && l.box[2] > 0 && l.box[3] > 0), [art, art.layerVisibility, art.layerCrops, art.wordPieces, art.layerConstraints])
+  const [panels, setPanels] = useState(art.previewSettings?.analysePanels || { tagging: 300, layers: 300, taggingCollapsed: false, layersCollapsed: false })
+  const [canvasTool, setCanvasTool] = useState('select')
+  const [zoom, setZoom] = useState(1)
+  const [pan, setPan] = useState({ x: 0, y: 0 })
+  const panStart = useRef<{ x: number; y: number; pointer: number } | null>(null)
+  function changePanels(patch: Partial<typeof panels>, commit = true) {
+    const next = { ...panels, ...patch }; setPanels(next)
+    if (commit) { art.previewSettings = { ...art.previewSettings, analysePanels: next }; onChange() }
+  }
   const [cursor, setCursor] = useState(0)
   const [selectedIds, setSelectedIds] = useState<string[]>([layers[0]?.id].filter(Boolean))
   const [treeSelection, setTreeSelection] = useState<string[]>([layers[0]?.id].filter(Boolean))
@@ -117,7 +128,7 @@ export function LayerTagger({ art, onChange, onRelink }: { art: Art; onChange: (
     const leaves = treeLeaves(ids)
     if (leaves.length) setSelectedIds(leaves)
   }
-  function onTreeAction(action: { type: string; ids?: string[]; patch?: { visible?: boolean; expanded?: boolean } }) {
+  function onTreeAction(action: { type: string; ids?: string[]; id?: string; patch?: { visible?: boolean; expanded?: boolean } }) {
     const next = reducePanel(panel, action as never)
     art.layerPanel = next
     art.groupExpanded = Object.fromEntries(next.nodes.filter(node => node.type === 'group').map(node => [node.id, node.expanded !== false]))
@@ -204,7 +215,23 @@ export function LayerTagger({ art, onChange, onRelink }: { art: Art; onChange: (
     return { x: (event.clientX - element.left) / element.width * bounds.w + bounds.x, y: (event.clientY - element.top) / element.height * bounds.h + bounds.y }
   }
   function pointerDown(event: PointerEvent<HTMLDivElement>) {
-    if (!drawing || event.button !== 0) return
+    if (event.button !== 0) return
+    if (canvasTool === 'hand') {
+      event.currentTarget.setPointerCapture(event.pointerId)
+      panStart.current = { x: event.clientX - pan.x, y: event.clientY - pan.y, pointer: event.pointerId }; return
+    }
+    if (canvasTool === 'zoom') { setZoom(value => Math.max(.5, Math.min(4, value * (event.altKey ? .8 : 1.25)))); return }
+    if (!drawing) {
+      const p = point(event)
+      const index = layers.findIndex(l => {
+        if (l.effectiveHidden || !l.px || !l.box) return false
+        const [x,y,w,h] = l.box
+        if (p.x < x || p.y < y || p.x >= x+w || p.y >= y+h) return false
+        return l.px.getContext('2d')!.getImageData(Math.floor((p.x-x)/w*l.px.width), Math.floor((p.y-y)/h*l.px.height), 1, 1).data[3] > 8
+      })
+      if (index >= 0) choose(index, event)
+      return
+    }
     event.preventDefault()
     event.currentTarget.focus()
     event.currentTarget.setPointerCapture(event.pointerId)
@@ -212,10 +239,12 @@ export function LayerTagger({ art, onChange, onRelink }: { art: Art; onChange: (
     setDraft(null)
   }
   function pointerMove(event: PointerEvent<HTMLDivElement>) {
+    if (panStart.current?.pointer === event.pointerId) { setPan({ x: event.clientX - panStart.current.x, y: event.clientY - panStart.current.y }); return }
     if (!start.current || event.pointerId !== start.current.pointer) return
     setDraft(rectangleBetween(start.current, point(event), bounds.w, bounds.h, bounds))
   }
   function pointerUp(event: PointerEvent<HTMLDivElement>) {
+    if (panStart.current?.pointer === event.pointerId) { panStart.current = null; event.currentTarget.releasePointerCapture(event.pointerId); return }
     if (!start.current || event.pointerId !== start.current.pointer) return
     const rect = rectangleBetween(start.current, point(event), bounds.w, bounds.h, bounds)
     start.current = null
@@ -224,7 +253,7 @@ export function LayerTagger({ art, onChange, onRelink }: { art: Art; onChange: (
     setMessage(rect.w >= 8 && rect.h >= 8 ? 'Check the outlined area, then confirm the selection below.' : 'Select an area at least 8 × 8 source pixels.')
   }
   function cancelSelection() {
-    start.current = null; setDrawing(false); setDraft(null); setMessage('Selection cancelled. Your saved background area is unchanged.')
+    panStart.current = null; start.current = null; setDrawing(false); setDraft(null); setMessage('Selection cancelled. Your saved background area is unchanged.')
   }
   function applySelection() {
     if (!draft || !layer.px) return
@@ -280,31 +309,14 @@ export function LayerTagger({ art, onChange, onRelink }: { art: Art; onChange: (
   const layerBounds = layer?.box && backgroundCrop({ layerId: layer.id, x: 0, y: 0, w: art.a.w, h: art.a.h }, layer, art.a.w, art.a.h)
 
   if (art.a.source?.format === 'image' || !layers.length) return <p>No editable layers were detected. A flattened image needs a layered PSD for individual tagging.</p>
-  return <section className="analyse-editor" aria-label="Layer identification">
+  function chooseTool(next: string) {
+    setCanvasTool(next); setDrawing(false); setDraft(null)
+    if (next === 'trace' && canDraw) beginSelection()
+  }
+  return <section className="analyse-editor" aria-label="Layer identification" style={{ '--tagging-width': `${panels.taggingCollapsed ? 40 : panels.tagging}px`, '--layers-width': `${panels.layersCollapsed ? 40 : panels.layers}px` } as CSSProperties}
+    onKeyDown={e => { if ((e.target as HTMLElement).closest('input,select,textarea') || e.ctrlKey || e.metaKey || e.altKey) return; const next = ({v:'select',t:'trace',h:'hand',z:'zoom'})[e.key.toLowerCase()]; if (next) { e.preventDefault(); chooseTool(next) } }}>
+
     {missingLinks.length > 0 && <div className="analyse-attention" role="status">{missingLinks.map(item => <p key={item.id}>{(item as { decodeError?: boolean }).decodeError ? `Embedded image ${item.name || 'image'} could not be read. Needs review.` : `Missing linked image ${(item as { linkName?: string }).linkName || item.name}. Needs review.`}</p>)}{missingLinks.some(item => (item as { missingLink?: boolean }).missingLink) && <label className="import-file-button">Relink images<input aria-label="Relink missing images" type="file" multiple accept=".png,.jpg,.jpeg,.webp,.gif" onChange={event => { if (event.target.files?.length && onRelink) void onRelink(event.target.files); event.currentTarget.value = '' }} /></label>}</div>}
-    <aside className="analyse-roles" aria-label="Layer roles">
-      <div className="analyse-inspector">
-        <div className="tagger-visual"><LayerThumbnail layer={layer} /><div><strong>{layer.name || 'Unnamed layer'}</strong><small>{layer.kind || 'Layer'}{(layer as { imageSource?: string }).imageSource ? ` · ${(layer as { imageSource?: string }).imageSource}` : ''} · {layer.box?.[2]} × {layer.box?.[3]} px · Position {layer.box?.[0]}, {layer.box?.[1]}</small></div></div>
-        <div className="tagger-question"><h3>{selectedLayers.length > 1 ? `Identify ${selectedLayers.length} selected layers` : 'What is this layer?'}</h3><p>{mixedValue(selectedLayers, item => canonicalRole(art.an.roles.find(r => r.id === item.id)?.role)).mixed ? 'Mixed roles — choosing a role confirms only that field.' : `${role?.confidence === 1 || role?.confirmed ? 'Confirmed' : 'Suggested'}: ${roleLabel(role?.role)}`}</p>
-          <div className="tag-options">{TAGS.map(([id, label]) => <button type="button" key={id} disabled={!selectedIds.length} className={selectedLayers.every(l => art.an.roles.find(r => r.id === l.id)?.role === id) ? 'chosen' : ''} aria-pressed={selectedLayers.length > 0 && selectedLayers.every(l => art.an.roles.find(r => r.id === l.id)?.role === id)} onClick={() => assignRole(id)}>{label}</button>)}</div>
-          <div className="analyse-selection-actions"><span>{selectedIds.length} selected · Ctrl/Cmd-click to add · Shift-click for a range</span><button type="button" className="ghost" disabled={!layer?.px || !!layer.wordSourceId || !!layer.splitIntoWords || !!layer.children?.length || (layer.logoProtected && art.layerConstraints?.[layer.id]?.allowSplit !== true)} onClick={prepareSplit}>Prepare / split</button><button type="button" className="ghost" disabled={selectedLayers.length !== 1 || !layer?.px || layer.wordSourceId || layer.splitIntoWords || layer.logoProtected || role?.role !== 'headline'} onClick={separateWords}>Separate words (source pixels)</button><button type="button" className="ghost" disabled={!selectedLayers.some(l => l.wordSourceId || l.splitIntoWords)} onClick={restoreWords}>Restore combined words</button><button type="button" className="ghost" disabled={selectedIds.length < 2 || selectedLayers.some(l => art.an.roles.find(r => r.id === l.id)?.role === 'bg')} onClick={linkSelection}>Link selected</button><button type="button" className="ghost" disabled={!(art.layerLinks || []).some(link => link.layerIds.some(id => selectedIds.includes(id)))} onClick={unlinkSelection}>Unlink selected</button><button type="button" className="ghost" disabled={!selectedIds.length} onClick={() => visibility(selectedIds, true)}>Show selected</button><button type="button" className="ghost" disabled={!selectedIds.length} onClick={() => visibility(selectedIds, false)}>Hide selected</button></div>
-          <label className="logo-protection"><input type="checkbox" checked={selectedLayers.some(l => l.logoProtected)} disabled={selectedLayers.some(l => art.an.roles.find(r => r.id === l.id)?.role === 'logo')} onChange={e => {
-            const ids = selectedLayers.map(l => l.wordSourceId || l.id)
-            if (e.target.checked) { if ((art.wordPieces || []).some(p => ids.includes(p.parentId))) restoreWords(); if (ids.includes(art.originalBorder?.sourceLayerId)) clearBorder() }
-            art.layerConstraints = { ...art.layerConstraints, ...Object.fromEntries(ids.map(id => [id, { required: false, anchor: 'free', orientation: 'preserve', ...art.layerConstraints?.[id], protectedLogo: e.target.checked }])) }; invalidateBackground(art); onChange()
-          }} />Contains a logo — preserve as one</label>
-          {layer?.logoProtected && <label className="logo-protection"><input type="checkbox" checked={art.layerConstraints?.[layer.id]?.allowSplit === true} onChange={e => updatePlacement({ allowSplit: e.target.checked })} />Allow split</label>}
-          <div className="edge-placement"><label><input type="checkbox" checked={!mixedValue(selectedLayers, item => art.layerConstraints?.[item.id]?.anchor || 'free').mixed && (placement.anchor || 'free') !== 'free'} disabled={!selectedIds.length} onChange={e => updatePlacement({ anchor: e.target.checked ? 'nearest' : 'free' })} />Keep to edge</label>{(placement.anchor || 'free') !== 'free' && <><label>Edge<select aria-label="Edge" value={placement.anchor || 'nearest'} onChange={e => updatePlacement({ anchor: e.target.value })}>{[['nearest', 'Nearest original edge'], ['top', 'Top'], ['bottom', 'Bottom'], ['left', 'Left'], ['right', 'Right'], ['locked', 'Locked relative position']].map(([id, text]) => <option key={id} value={id}>{text}</option>)}</select></label><label>Edge margin (% of short side)<input type="number" min={0} max={20} step={.5} value={placement.margin ?? 2} onChange={e => updatePlacement({ margin: Math.max(0, Math.min(20, Number(e.target.value))) })} /></label></>}<label>Priority<select aria-label="Priority" value={mixedValue(selectedLayers, item => art.layerConstraints?.[item.id]?.priority || 'medium').mixed ? '' : (placement.priority || 'medium')} onChange={e => updatePlacement({ priority: e.target.value })}>{mixedValue(selectedLayers, item => art.layerConstraints?.[item.id]?.priority || 'medium').mixed && <option value="">Mixed</option>}{['critical', 'high', 'medium', 'low'].map(level => <option key={level} value={level}>{level[0].toUpperCase() + level.slice(1)}</option>)}</select></label><label>Inclusion<select aria-label="Inclusion" value={mixedValue(selectedLayers, item => art.layerConstraints?.[item.id]?.inclusion || 'include').mixed ? '' : (placement.inclusion || 'include')} onChange={e => updatePlacement({ inclusion: e.target.value })}>{mixedValue(selectedLayers, item => art.layerConstraints?.[item.id]?.inclusion || 'include').mixed && <option value="">Mixed</option>}<option value="include">Include</option><option value="exclude">Exclude</option></select></label></div>
-          <details className="analyse-preservation"><summary>Placement & preservation</summary><div className="layer-behavior">
-            <label><input type="checkbox" checked={!!placement.required} onChange={e => updatePlacement({ required: e.target.checked })} />Required in every adaptation</label>
-            <label>Position<select value={placement.anchor || 'free'} onChange={e => updatePlacement({ anchor: e.target.value })}>{[['free', 'Adapt freely'], ['nearest', 'Stay near original edge'], ['top', 'Top edge'], ['right', 'Right edge'], ['bottom', 'Bottom edge'], ['left', 'Left edge'], ['locked', 'Keep original position']].map(([id, label]) => <option key={id} value={id}>{label}</option>)}</select></label>
-            <label>Orientation<select value={placement.orientation || 'preserve'} onChange={e => updatePlacement({ orientation: e.target.value })}><option value="preserve">Preserve original</option><option value="horizontal">Horizontal</option><option value="vertical">Vertical</option></select></label>
-            <small>Edge placement applies to every role in calibration and batch layouts. Raster text retains its original orientation.</small>
-          </div></details>
-          <div className="tagger-controls"><button type="button" className="ghost" disabled={currentIndex === 0} onClick={() => choose(currentIndex - 1)}>← Previous</button><span>{currentIndex + 1} of {layers.length}</span><button type="button" className="ghost" disabled={currentIndex === layers.length - 1} onClick={() => choose(currentIndex + 1)}>Next →</button></div>
-        </div>
-      </div>
-    </aside>
     <div className="analyse-main">
       {!art.an.roles.some(r => r.role === 'headline') && <p className="analyse-attention" role="status">Main headline not identified. Select its original layers and tag them Main headline. The offer will stay secondary.</p>}
       <div className="analyse-toolbar">
@@ -318,11 +330,13 @@ export function LayerTagger({ art, onChange, onRelink }: { art: Art; onChange: (
         <label>Preview color<input type="color" aria-label="Preview background color" value={preview.color || '#ffffff'} onChange={e => updatePreview({ color: e.target.value, alpha: false })} /></label>
         <button type="button" className="ghost" disabled={!canDraw} aria-pressed={drawing && tool === 'background'} onClick={beginSelection}>Draw background area</button><button type="button" className="ghost" disabled={!canDraw || layer.logoProtected || !['headline','offer','legal','cta','border'].includes(role?.role || '')} onClick={beginBorder}>Trace original border</button>
       </div>
+      <div className="analyse-canvas-area">
+        <div className="analyse-tool-strip" role="toolbar" aria-label="Analyse tools">{[['select','Select','V'],['trace','Trace area','T'],['hand','Pan','H'],['zoom','Zoom','Z']].map(([id,label,key]) => <button type="button" key={id} title={`${label} (${key})`} aria-label={`${label} ${key}`} aria-pressed={canvasTool === id} disabled={id === 'trace' && !canDraw} onClick={() => chooseTool(id)}>{key}</button>)}<button type="button" title="Fit artwork" aria-label="Fit artwork" onClick={() => { setZoom(1); setPan({x:0,y:0}) }}>Fit</button></div>
       <div className="analyse-artboard-well">
-        <div className={`analyse-artboard ${drawing ? 'is-drawing' : ''}`} style={{ aspectRatio: `${bounds.w} / ${bounds.h}`, width: `min(100%, ${65 * bounds.w / bounds.h}vh)`, background: preview.alpha === false ? preview.color || '#ffffff' : undefined }}
+        <div className={`analyse-artboard ${drawing ? 'is-drawing' : ''}`} style={{ aspectRatio: `${bounds.w} / ${bounds.h}`, width: `min(100%, ${65 * bounds.w / bounds.h}vh, calc(100cqh * ${bounds.w / bounds.h}))`, transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`, background: preview.alpha === false ? preview.color || '#ffffff' : undefined }}
           tabIndex={0} role="group" aria-label="Artwork background selection" aria-describedby="background-help"
           onPointerDown={pointerDown} onPointerMove={pointerMove} onPointerUp={pointerUp}
-          onPointerCancel={cancelSelection} onLostPointerCapture={() => { start.current = null }}
+          onPointerCancel={cancelSelection} onLostPointerCapture={() => { start.current = null; panStart.current = null }}
           onKeyDown={e => { if (e.key === 'Escape') { e.preventDefault(); cancelSelection() } }}>
           {view === 'layer' && extent === 'layer' && <div className="original-artboard-bounds" style={overlayStyle({ x: 0, y: 0, w: art.a.w, h: art.a.h })}><span>{art.a.w} × {art.a.h} artboard</span></div>}
           <canvas ref={canvasRef} aria-label={view === 'artwork' ? 'Original artwork' : `Selected layer: ${layer.name}`} />
@@ -330,7 +344,8 @@ export function LayerTagger({ art, onChange, onRelink }: { art: Art; onChange: (
           {shownRegion && (draft || view === 'artwork' || region?.layerId === layer.id) && <div className={`background-marquee ${draft ? 'is-draft' : ''}`} style={overlayStyle(shownRegion)}><span>{draft ? tool === 'border' ? 'Original border trace' : 'New background area' : 'Reusable background'}</span></div>}
         </div>
       </div>
-      <div className="background-selection-controls">
+      </div>
+      <details className="analyse-background-details" open={drawing || !!draft || undefined}><summary>Background and original border</summary><div className="background-selection-controls">
         <div><strong>Reusable background</strong><p id="background-help">Pick the background layer on the right, then draw over clean texture. Entire selected layers reveals off-artboard pixels. Choose one visible background layer to draw a reusable patch.</p></div>
         <div className="background-actions">
           {draft && (tool === 'background' ? <button type="button" onClick={applySelection}>Use this background area</button> : <button type="button" onClick={applyBorder}>Use original border</button>)}
@@ -343,10 +358,39 @@ export function LayerTagger({ art, onChange, onRelink }: { art: Art; onChange: (
           {(['x', 'y', 'w', 'h'] as const).map(key => <label key={key}>{({ x: 'X', y: 'Y', w: 'Width', h: 'Height' })[key]}<input type="number" min={key === 'x' ? bounds.x : key === 'y' ? bounds.y : 0} max={key === 'x' ? bounds.x + bounds.w : key === 'y' ? bounds.y + bounds.h : key === 'w' ? bounds.w : bounds.h} value={draft?.[key] ?? 0} onChange={e => setDraft({ ...(draft || { x: 0, y: 0, w: 0, h: 0 }), [key]: Number(e.target.value) })} /></label>)}
           <small>Original pixels · Escape cancels · Selection uses layer pixels; PSD adjustments may differ from the composite.</small>
         </div>}
-      </div>
+      </div></details>
     </div>
-    <aside className="analyse-layers" aria-label="Artwork layers">
+    <AnalysePanel title="Tagging" className="analyse-tagging" width={panels.tagging} collapsed={panels.taggingCollapsed} onResize={(tagging, commit) => changePanels({ tagging }, commit)} onCollapse={() => changePanels({ taggingCollapsed: !panels.taggingCollapsed })}>
+      <div className="analyse-inspector">
+        <div className="tagger-visual"><LayerThumbnail layer={layer} /><div><strong>{layer.name || 'Unnamed layer'}</strong><small>{layer.kind || 'Layer'}{(layer as { imageSource?: string }).imageSource ? ` · ${(layer as { imageSource?: string }).imageSource}` : ''} · {layer.box?.[2]} × {layer.box?.[3]} px · Position {layer.box?.[0]}, {layer.box?.[1]}</small></div></div>
+        <div className="tagger-question"><h3>{selectedLayers.length > 1 ? `Identify ${selectedLayers.length} selected layers` : 'What is this layer?'}</h3><p>{mixedValue(selectedLayers, item => canonicalRole(art.an.roles.find(r => r.id === item.id)?.role)).mixed ? 'Mixed roles — choosing a role confirms only that field.' : `${role?.confidence === 1 || role?.confirmed ? 'Confirmed' : 'Suggested'}: ${roleLabel(role?.role)}`}</p>
+          <div className="tag-options">{TAGS.map(([id, label]) => <button type="button" key={id} disabled={!selectedIds.length} className={selectedLayers.every(l => art.an.roles.find(r => r.id === l.id)?.role === id) ? 'chosen' : ''} aria-pressed={selectedLayers.length > 0 && selectedLayers.every(l => art.an.roles.find(r => r.id === l.id)?.role === id)} onClick={() => assignRole(id)}>{label}</button>)}</div>
+          <fieldset className="analyse-property"><legend>Requirement</legend><label><input type="checkbox" checked={!!placement.required} onChange={e => updatePlacement({ required: e.target.checked })} />Required in every adaptation</label></fieldset>
+          <fieldset className="analyse-property"><legend>Priority</legend><label>Priority<select aria-label="Priority" value={mixedValue(selectedLayers, item => art.layerConstraints?.[item.id]?.priority || 'medium').mixed ? '' : (placement.priority || 'medium')} onChange={e => updatePlacement({ priority: e.target.value })}>{mixedValue(selectedLayers, item => art.layerConstraints?.[item.id]?.priority || 'medium').mixed && <option value="">Mixed</option>}{['critical', 'high', 'medium', 'low'].map(level => <option key={level} value={level}>{level[0].toUpperCase() + level.slice(1)}</option>)}</select></label></fieldset>
+          <fieldset className="analyse-property"><legend>Placement</legend><div className="analyse-chips">{[['left','Left'],['center','Center'],['right','Right'],['free','Free']].map(([id,label]) => <button type="button" key={id} aria-pressed={(placement.anchor || 'free') === id} onClick={() => updatePlacement({anchor:id})}>{label}</button>)}</div></fieldset>
+          <fieldset className="analyse-property"><legend>Integrity</legend><div className="analyse-chips">{[['no-crop','No crop'],['can-crop','Can crop'],['can-extend','Can extend']].map(([id,label]) => <button type="button" key={id} aria-pressed={(placement.cropPolicy || 'no-crop') === id} onClick={() => updatePlacement({cropPolicy:id})}>{label}</button>)}</div><small>Permission for adaptation. Source pixels remain intact.</small></fieldset>
+          <fieldset className="analyse-property"><legend>Language and source</legend><label>Language<select aria-label="Selected artwork language" value={art.lang || ''} onChange={e => { art.lang = e.target.value; onChange() }}><option value="">Unassigned</option><option value="EN">EN</option><option value="AR">AR</option></select></label><p>{layer.kind === 'shape' ? 'Vector' : layer.kind === 'text' ? 'Text' : 'Raster'} · {(layer as any).imageSource || (layer as any).sourceKind || art.a.source?.format}</p></fieldset>
+          <fieldset className="analyse-property"><legend>Relationships</legend><button type="button" disabled={selectedIds.length < 2} onClick={() => onTreeAction({type:'group',ids:treeSelection.length ? treeSelection : selectedIds,id:crypto.randomUUID()})}>Group with selected</button><button type="button" disabled={selectedIds.length < 2} onClick={linkSelection}>Link to selected</button></fieldset>
+          <button type="button" className="analyse-confirm" disabled={!role || role.confidence === 1 || role.confirmed} onClick={() => assignRole(role.role)}>Confirm suggestion</button>
+          <div className="analyse-selection-actions"><span>{selectedIds.length} selected · Ctrl/Cmd-click to add · Shift-click for a range</span><button type="button" className="ghost" disabled={!layer?.px || !!layer.wordSourceId || !!layer.splitIntoWords || !!layer.children?.length || (layer.logoProtected && art.layerConstraints?.[layer.id]?.allowSplit !== true)} onClick={prepareSplit}>Prepare / split</button><button type="button" className="ghost" disabled={selectedLayers.length !== 1 || !layer?.px || layer.wordSourceId || layer.splitIntoWords || layer.logoProtected || role?.role !== 'headline'} onClick={separateWords}>Separate words (source pixels)</button><button type="button" className="ghost" disabled={!selectedLayers.some(l => l.wordSourceId || l.splitIntoWords)} onClick={restoreWords}>Restore combined words</button><button type="button" className="ghost" disabled={selectedIds.length < 2 || selectedLayers.some(l => art.an.roles.find(r => r.id === l.id)?.role === 'bg')} onClick={linkSelection}>Link selected</button><button type="button" className="ghost" disabled={!(art.layerLinks || []).some(link => link.layerIds.some(id => selectedIds.includes(id)))} onClick={unlinkSelection}>Unlink selected</button><button type="button" className="ghost" disabled={!selectedIds.length} onClick={() => visibility(selectedIds, true)}>Show selected</button><button type="button" className="ghost" disabled={!selectedIds.length} onClick={() => visibility(selectedIds, false)}>Hide selected</button></div>
+          <label className="logo-protection"><input type="checkbox" checked={selectedLayers.some(l => l.logoProtected)} disabled={selectedLayers.some(l => art.an.roles.find(r => r.id === l.id)?.role === 'logo')} onChange={e => {
+            const ids = selectedLayers.map(l => l.wordSourceId || l.id)
+            if (e.target.checked) { if ((art.wordPieces || []).some(p => ids.includes(p.parentId))) restoreWords(); if (ids.includes(art.originalBorder?.sourceLayerId)) clearBorder() }
+            art.layerConstraints = { ...art.layerConstraints, ...Object.fromEntries(ids.map(id => [id, { required: false, anchor: 'free', orientation: 'preserve', ...art.layerConstraints?.[id], protectedLogo: e.target.checked }])) }; invalidateBackground(art); onChange()
+          }} />Contains a logo — preserve as one</label>
+          {layer?.logoProtected && <label className="logo-protection"><input type="checkbox" checked={art.layerConstraints?.[layer.id]?.allowSplit === true} onChange={e => updatePlacement({ allowSplit: e.target.checked })} />Allow split</label>}
+          <div className="edge-placement"><label><input type="checkbox" checked={!mixedValue(selectedLayers, item => art.layerConstraints?.[item.id]?.anchor || 'free').mixed && !['free','center'].includes(placement.anchor || 'free')} disabled={!selectedIds.length} onChange={e => updatePlacement({ anchor: e.target.checked ? 'nearest' : 'free' })} />Keep to edge</label>{!['free','center'].includes(placement.anchor || 'free') && <><label>Edge<select aria-label="Edge" value={placement.anchor || 'nearest'} onChange={e => updatePlacement({ anchor: e.target.value })}>{[['nearest', 'Nearest original edge'], ['top', 'Top'], ['bottom', 'Bottom'], ['left', 'Left'], ['right', 'Right'], ['locked', 'Locked relative position']].map(([id, text]) => <option key={id} value={id}>{text}</option>)}</select></label><label>Edge margin (% of short side)<input type="number" min={0} max={20} step={.5} value={placement.margin ?? 2} onChange={e => updatePlacement({ margin: Math.max(0, Math.min(20, Number(e.target.value))) })} /></label></>}<label>Inclusion<select aria-label="Inclusion" value={mixedValue(selectedLayers, item => art.layerConstraints?.[item.id]?.inclusion || 'include').mixed ? '' : (placement.inclusion || 'include')} onChange={e => updatePlacement({ inclusion: e.target.value })}>{mixedValue(selectedLayers, item => art.layerConstraints?.[item.id]?.inclusion || 'include').mixed && <option value="">Mixed</option>}<option value="include">Include</option><option value="exclude">Exclude</option></select></label></div>
+          <details className="analyse-preservation"><summary>Placement & preservation</summary><div className="layer-behavior">
+            <label>Position<select value={placement.anchor || 'free'} onChange={e => updatePlacement({ anchor: e.target.value })}>{[['free', 'Adapt freely'], ['center', 'Horizontal center'], ['nearest', 'Stay near original edge'], ['top', 'Top edge'], ['right', 'Right edge'], ['bottom', 'Bottom edge'], ['left', 'Left edge'], ['locked', 'Keep original position']].map(([id, label]) => <option key={id} value={id}>{label}</option>)}</select></label>
+            <label>Orientation<select value={placement.orientation || 'preserve'} onChange={e => updatePlacement({ orientation: e.target.value })}><option value="preserve">Preserve original</option><option value="horizontal">Horizontal</option><option value="vertical">Vertical</option></select></label>
+            <small>Edge placement applies to every role in calibration and batch layouts. Raster text retains its original orientation.</small>
+          </div></details>
+          <div className="tagger-controls"><button type="button" className="ghost" disabled={currentIndex === 0} onClick={() => choose(currentIndex - 1)}>← Previous</button><span>{currentIndex + 1} of {layers.length}</span><button type="button" className="ghost" disabled={currentIndex === layers.length - 1} onClick={() => choose(currentIndex + 1)}>Next →</button></div>
+        </div>
+      </div>
+    </AnalysePanel>
+    <AnalysePanel title="Layers" className="analyse-layers" width={panels.layers} collapsed={panels.layersCollapsed} onResize={(layers, commit) => changePanels({ layers }, commit)} onCollapse={() => changePanels({ layersCollapsed: !panels.layersCollapsed })}>
       <LayersPanel rowClassName="analyse-layer" eyeLabel={(_layer, index) => String(index + 1)} state={panel} selected={treeSelection.length ? treeSelection : selectedIds} onSelect={onTreeSelect} onAction={onTreeAction} thumbnailSize={art.previewSettings?.layerThumbnailSize || 48} onThumbnailSize={size => { art.previewSettings = { ...preview, layerThumbnailSize: size }; onChange() }} onResetAppearance={() => { art.layerPanel = null; onChange() }} onLink={linkSelection} canLink={selectedIds.length > 1} linked={(art.layerLinks || []).some(link => link.layerIds.some(id => selectedIds.includes(id)))} preparation={{ label: 'Prepare / split', disabled: !layer?.px || !!layer.wordSourceId || !!layer.splitIntoWords || !!layer.children?.length || (layer.logoProtected && art.layerConstraints?.[layer.id]?.allowSplit !== true), run: prepareSplit, status: message }} renderThumbnail={node => { const source = layers.find(item => node.sourceIds.includes(item.id)); return source ? <LayerThumbnail layer={source} /> : <span>▱</span> }} />
-    </aside>
+    </AnalysePanel>
   </section>
 }

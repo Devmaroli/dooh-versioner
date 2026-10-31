@@ -17,7 +17,7 @@ test('imports, corrects language, tags, recovers and removes only one duplicate-
   await expect(page.getByLabel('Language for sample.psd')).toHaveCount(2)
   await page.getByLabel('Language for sample.psd').nth(1).selectOption('AR')
   await page.getByRole('button', { name: 'Continue to Analyse' }).click()
-  await expect(page.getByRole('complementary', { name: 'Artwork layers' })).toBeVisible()
+  await expect(page.getByRole('complementary', { name: 'Layers panel' })).toBeVisible()
   await page.getByRole('button', { name: 'Main headline', exact: true }).click()
   await expect(page.locator('.tagger-controls')).toContainText('1 of')
   await page.getByText('Placement & preservation', { exact: true }).click()

@@ -7,7 +7,7 @@ export type LayerRecord = {
   sourceIds: string[]; memberIds: string[]; importedGroup?: boolean; importedEffects?: Record<string, unknown> | null
   fx?: { stroke?: { enabled: boolean; color: string; width: number; opacity: number } }
   adjustment?: { brightness: number; contrast: number }; empty?: boolean; deleted?: boolean
-  originId?: string; role?: string; sourceKind?: string; linkId?: string; sourceLink?: boolean
+  originId?: string; role?: string; roleSuggested?: boolean; sourceKind?: string; linkId?: string; sourceLink?: boolean
   fontStatus?: string; requestedFont?: string
   expanded?: boolean
 }
@@ -55,7 +55,7 @@ export function normalizePanel(state: LayerPanelState): LayerPanelState {
 export function reconcilePanel(saved: LayerPanelState | undefined, templates: LayerRecord[]): LayerPanelState {
   if (!saved) return normalizePanel({ version: 1, nodes: templates })
   const map = new Map(templates.map(n => [n.id, n]))
-  const nodes: LayerRecord[] = saved.nodes.filter(n => map.has(n.id) || n.empty || n.type === 'group' && !n.importedGroup || n.type === 'adjustment').map(n => ({ ...map.get(n.id), ...n, linkId:map.get(n.id)?.linkId }))
+  const nodes: LayerRecord[] = saved.nodes.filter(n => map.has(n.id) || n.empty || n.type === 'group' && !n.importedGroup || n.type === 'adjustment').map(n => ({ ...map.get(n.id), ...n, role:map.get(n.id)?.role, roleSuggested:map.get(n.id)?.roleSuggested, fontStatus:map.get(n.id)?.fontStatus, requestedFont:map.get(n.id)?.requestedFont, linkId:map.get(n.id)?.linkId }))
   let wordOffset=0
   for (const node of templates) if (!nodes.some(n => n.id === node.id)) {
     const previous=node.originId?saved.nodes.find(n=>n.sourceIds.includes(node.originId!)):null

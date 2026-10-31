@@ -101,6 +101,7 @@ export function fitFrame(frame, unit, screen, art) {
     anchor = [['left', b.x / art.a.w], ['right', (art.a.w - b.x - b.w) / art.a.w], ['top', b.y / art.a.h], ['bottom', (art.a.h - b.y - b.h) / art.a.h]].sort((a, b) => a[1] - b[1])[0][0]
   }
   if (anchor === 'locked') { x = unit.box.x / art.a.w * screen.w; y = unit.box.y / art.a.h * screen.h }
+  if (anchor === 'center') x = (screen.w - w) / 2
   if (anchor === 'left') x = margin
   if (anchor === 'right') x = screen.w - margin - w
   if (anchor === 'top') y = margin

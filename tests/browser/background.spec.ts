@@ -13,7 +13,7 @@ test('IKEA background rectangle constrains preview/export pixels and survives re
   await page.locator('input[type=file]').setInputFiles(fixture!)
   await page.getByLabel('Language for ikea.psd').selectOption('EN')
   await page.getByRole('button', { name: 'Continue to Analyse' }).click()
-  const rail = page.getByRole('complementary', { name: 'Artwork layers' })
+  const rail = page.getByRole('complementary', { name: 'Layers panel' })
   await expect(rail.getByRole('treeitem', { name: /Offer extended/ })).toContainText('Offer / secondary message')
   await expect(page.getByText('Main headline not identified.', { exact: false })).toBeVisible()
   await page.locator('button.lp-name', { hasText: /^Vector Smart Object$/ }).click()
