@@ -1,5 +1,5 @@
 import { expect, test } from 'vitest'
-import { LayerRecord, reducePanel, orderedNodes, unlocked, normalizePanel, selectPanelLayers, effectiveLocks, effectiveVisible, reconcilePanel } from '../../layerPanelModel'
+import { LayerRecord, reducePanel, orderedNodes, unlocked, normalizePanel, selectPanelLayers, effectiveLocks, effectiveVisible, reconcilePanel, moveTreeFocus, cascadedOpacity } from '../../layerPanelModel'
 const node=(id:string,parentId:string|null=null,type:LayerRecord['type']='pixel'):LayerRecord=>({id,name:id,type,parentId,visible:true,blendMode:'normal',opacity:1,fill:1,locks:unlocked(),mask:null,sourceIds:[id],memberIds:[id]})
 test('typed layer tree groups, reparents, sorts and prevents cycles',()=>{
   let state={version:1 as const,nodes:[node('a'),node('b'),node('c')]}
@@ -22,9 +22,28 @@ test('locks enforce appearance, reparenting and parent visibility without corrup
   state=reducePanel(state,{type:'lock',ids:['a'],key:'all',value:true})
   expect(reducePanel(state,{type:'delete',ids:['g']})).toBe(state)
 })
+test('groups nest, ungroup, and cascade opacity while collapsed rows stay out of a shift range',()=>{
+  let state={version:1 as const,nodes:[node('a'),node('b'),node('c')]}
+  state=reducePanel(state,{type:'group',ids:['a','b'],id:'folder'})
+  state=reducePanel(state,{type:'group',ids:['folder'],id:'outer'})
+  expect(state.nodes.find(n=>n.id==='a')?.parentId).toBe('folder')
+  expect(state.nodes.find(n=>n.id==='folder')?.parentId).toBe('outer')
+  expect(state.nodes.find(n=>n.id==='folder')?.expanded).toBe(true)
+  state=reducePanel(state,{type:'patch',ids:['folder'],patch:{expanded:false}})
+  state=reducePanel(state,{type:'patch',ids:['outer'],patch:{opacity:.5}})
+  expect(cascadedOpacity(state,'a')).toBe(.5)
+  const visible=['outer']
+  expect(selectPanelLayers([],'c',visible,'outer',{})).toEqual(['c'])
+  state=reducePanel(state,{type:'ungroup',ids:['outer']})
+  expect(state.nodes.find(n=>n.id==='outer')?.deleted).toBe(true)
+  expect(state.nodes.find(n=>n.id==='folder')?.parentId).toBeNull()
+})
 test('Ctrl and Shift selection respect visible row order',()=>{
   expect(selectPanelLayers(['a'],'c',['a','b','c'],'a',{shiftKey:true})).toEqual(['a','b','c'])
   expect(selectPanelLayers(['a'],'c',['a','b','c'],'a',{ctrlKey:true})).toEqual(['a','c'])
+  expect(moveTreeFocus(['a','b','c'],'b','ArrowDown')).toBe('c')
+  expect(moveTreeFocus(['a','b','c'],'b','Home')).toBe('a')
+  expect(moveTreeFocus(['a','b','c'],'a','ArrowUp')).toBe('a')
 })
 test('new word layers preserve parent position in tree and a new border appears before background',()=>{
   const old={version:1 as const,nodes:[node('layer:h'),node('__background')]}

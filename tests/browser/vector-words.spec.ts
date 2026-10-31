@@ -10,7 +10,7 @@ test('IKEA Illustrator smart-object words render from embedded vectors; Ctrl/Shi
   await page.goto('/');await expect(page.getByText('Saved on this device')).toBeVisible()
   await page.locator('input[type=file]').setInputFiles(fixture!)
   await page.getByRole('button',{name:'Continue to Analyse'}).click()
-  await page.locator('.analyse-layer').nth(6).click();await page.getByRole('button',{name:'Main headline',exact:true}).click()
+  await page.locator('button.lp-name',{hasText:/^Vector Smart Object$/}).click();await page.getByRole('button',{name:'Main headline',exact:true}).click()
   await page.getByRole('button',{name:/3 · Adapt/}).click();await page.getByRole('button',{name:'Edit Alshaheed - Mupi',exact:true}).click()
   await page.getByRole('button',{name:'Prepare headline words',exact:true}).click()
   const rows=page.locator('.lp-row').filter({hasText:/Word [0-9]+ · embedded vector/})
@@ -31,8 +31,10 @@ test('IKEA Illustrator smart-object words render from embedded vectors; Ctrl/Shi
   await page.getByRole('button',{name:'Move Word 1 · embedded vector',exact:true}).focus();await page.keyboard.press('Enter')
   await expect(page.locator('.lp-row.selected')).toHaveCount(1)
   const inkPoint=async(i:number)=>{
-    const box=(await page.getByRole('button',{name:`Move Word ${i} · embedded vector`,exact:true}).boundingBox())!,area=(await canvas.boundingBox())!
-    const point=await canvas.evaluate((c:HTMLCanvasElement,r)=>{const g=c.getContext('2d')!,d=g.getImageData(0,0,c.width,c.height).data;for(let y=Math.ceil(r.y*c.height)+3;y<(r.y+r.h)*c.height-3;y++)for(let x=Math.ceil(r.x*c.width)+3;x<(r.x+r.w)*c.width-3;x++){const k=(y*c.width+x)*4;if(d[k]<70&&d[k+1]<70&&d[k+2]<70&&d[k+3]>200)return {x:x/c.width,y:y/c.height}}return null},{x:(box.x-area.x)/area.width,y:(box.y-area.y)/area.height,w:box.width/area.width,h:box.height/area.height})
+    const handle=page.getByRole('button',{name:`Move Word ${i} · embedded vector`,exact:true})
+    await expect(handle).toBeVisible()
+    const box=(await handle.boundingBox())!,area=(await canvas.boundingBox())!
+    const point=await canvas.evaluate((c:HTMLCanvasElement,r)=>{const g=c.getContext('2d')!,d=g.getImageData(0,0,c.width,c.height).data;const y0=Math.max(0,Math.ceil(r.y*c.height)+3),y1=Math.min(c.height,Math.floor((r.y+r.h)*c.height)-3),x0=Math.max(0,Math.ceil(r.x*c.width)+3),x1=Math.min(c.width,Math.floor((r.x+r.w)*c.width)-3);for(let y=y0;y<y1;y++)for(let x=x0;x<x1;x++){const k=(y*c.width+x)*4;if(d[k+3]>200&&Math.max(d[k],d[k+1],d[k+2])<180)return {x:x/c.width,y:y/c.height}}return null},{x:(box.x-area.x)/area.width,y:(box.y-area.y)/area.height,w:box.width/area.width,h:box.height/area.height})
     expect(point).not.toBeNull();return {x:area.x+point!.x*area.width,y:area.y+point!.y*area.height}
   }
   const second=await inkPoint(2);await page.keyboard.down('Shift');await page.mouse.click(second.x,second.y);await page.keyboard.up('Shift');await expect(page.locator('.lp-row.selected')).toHaveCount(2)
@@ -57,7 +59,7 @@ test('IKEA Illustrator smart-object words render from embedded vectors; Ctrl/Shi
 test('existing pixel word pieces can be upgraded to their embedded Illustrator source without losing placements',async({page})=>{
   const fixture=process.env.IKEA_PSD;test.skip(!fixture||!fs.existsSync(fixture),'Private IKEA PSD required.')
   await page.goto('/');await expect(page.getByText('Saved on this device')).toBeVisible();await page.locator('input[type=file]').setInputFiles(fixture!)
-  await page.getByRole('button',{name:'Continue to Analyse'}).click();await page.locator('.analyse-layer').nth(6).click();await page.getByRole('button',{name:'Main headline',exact:true}).click()
+  await page.getByRole('button',{name:'Continue to Analyse'}).click();await page.locator('button.lp-name',{hasText:/^Vector Smart Object$/}).click();await page.getByRole('button',{name:'Main headline',exact:true}).click()
   await page.getByRole('button',{name:'Trace original border',exact:true}).click()
   for(const [name,value] of [['X','99'],['Y','279'],['Width','1522'],['Height','732']])await page.getByRole('spinbutton',{name,exact:true}).fill(value)
   await page.getByRole('button',{name:'Use original border',exact:true}).click();await page.getByRole('button',{name:'Separate words (source pixels)',exact:true}).click()

@@ -1,4 +1,13 @@
-.layers-panel { border: 1px solid #344969; background: #141820; margin: 12px 0; }
+.layers-panel { border: 1px solid #344969; background: #141820; margin: 12px 0; display: flex; flex-direction: column; }
+.layers-panel > .lp-heading { order: 0; }
+.layers-panel > .lp-list { order: 1; }
+.layers-panel > .lp-footer { order: 3; }
+.lp-row:focus { outline: 2px solid #a6c6ff; outline-offset: -2px; }
+.lp-chevron, .lp-folder { width: 16px; height: 16px; padding: 0; background: transparent; border: 0; color: #fff; flex: none; }
+.lp-chevron svg { display: block; transform: rotate(0deg); transform-origin: 50% 50%; }
+.lp-chevron.is-open svg { transform: rotate(90deg); }
+@media (prefers-reduced-motion: no-preference) { .lp-chevron svg { transition: transform .12s linear; } }
+.lp-name-line .lp-folder { display: grid; place-items: center; }
 .lp-heading { display: flex; justify-content: space-between; align-items: center; padding: 10px; gap: 12px; }
 .calibration-controls .lp-heading h2 { margin: 0; }
 .calibration-controls .lp-heading label { margin: 0; font-size: 11px; }

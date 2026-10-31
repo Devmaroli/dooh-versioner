@@ -71,7 +71,9 @@
 .layer-link-toggle { display: flex; align-items: center; justify-content: center; gap: 6px; flex-shrink: 0; }
 .layer-link-toggle[aria-pressed="true"] { background: #a6c6ff; color: #111c2e; }
 .transform-heading { border-top: 1px solid #344969; padding-top: 16px; font-size: 14px; }
-.calibration-controls .editor-layer-list { max-height: 42vh; min-height: 180px; overflow-y: auto; margin-top: 12px; }
+.calibration-controls .editor-layer-list { max-height: min(46vh, 420px); min-height: 200px; overflow-y: auto; margin-top: 0; }
+.inspector-jumps { display: flex; gap: 8px; position: sticky; top: 0; z-index: 2; background: #141820; padding-bottom: 8px; }
+.inspector-jumps button { min-height: 32px; }
 .editor-layer-row { display: flex; align-items: center; gap: 8px; padding: 6px; border: 1px solid transparent; }
 .editor-layer-row.selected, .editor-special-layer.selected { background: #23344d; border-color: #a6c6ff; }
 .editor-layer-row > input { flex-shrink: 0; margin: 0; }

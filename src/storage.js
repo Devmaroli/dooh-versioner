@@ -21,7 +21,7 @@ export async function saveProject(snapshot) {
   const db = await open()
   return new Promise((resolve, reject) => {
     const tx = db.transaction('project', 'readwrite')
-    tx.objectStore('project').put({ ...snapshot, version: 1 }, 'current')
+    tx.objectStore('project').put({ ...snapshot, version: 2 }, 'current')
     tx.oncomplete = resolve
     tx.onerror = () => reject(tx.error)
     tx.onabort = () => reject(tx.error || new Error('Project save aborted'))

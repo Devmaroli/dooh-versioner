@@ -1,6 +1,8 @@
 /* App shell: existing technical dark palette; artwork centre + right layer inspector.
    UI scope: Analyse only. Critique scores (1–5): visual 5, purpose 5, hierarchy 4, specificity 5, restraint 4, variety 4. */
-.analyse-editor { display: grid; grid-template-columns: minmax(0, 1fr) 288px; margin-top: 16px; border: 1px solid #344969; border-radius: 10px; background: #111c2e; overflow: clip; text-align: left; }
+.analyse-editor { display: grid; grid-template-columns: minmax(240px, 300px) minmax(0, 1fr) minmax(250px, 320px); height: calc(100vh - 148px); min-height: 520px; margin-top: 16px; border: 1px solid #344969; border-radius: 10px; background: #111c2e; overflow: hidden; text-align: left; }
+.analyse-roles, .analyse-main, .analyse-layers { min-width: 0; min-height: 0; overflow: auto; }
+.analyse-roles { border-right: 1px solid #344969; background: #141820; }
 .analyse-main { min-width: 0; }
 .analyse-toolbar { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; padding: 12px 16px; border-bottom: 1px solid #344969; }
 .analyse-toolbar > span { color: #b1bed2; font-variant-numeric: tabular-nums; margin-right: auto; }
@@ -41,7 +43,9 @@
 .analyse-preservation { margin-top: 16px; }
 .analyse-preservation summary { cursor: pointer; padding: 8px 0; color: #b1bed2; }
 .analyse-preservation .layer-behavior { margin-top: 4px; }
-.analyse-layers { align-self: start; position: sticky; top: 12px; padding: 0; border: 0; border-left: 1px solid #344969; background: #141820; max-height: calc(100vh - 24px); min-height: 400px; overflow: auto; }
+.analyse-layers { padding: 0; border: 0; border-left: 1px solid #344969; background: #141820; display: flex; flex-direction: column; }
+.analyse-layers .layers-panel { margin: 0; border: 0; min-height: 100%; }
+.analyse-layers .lp-list { max-height: none; flex: 1; }
 .analyse-layers-heading { position: sticky; top: 0; z-index: 1; padding: 16px; background: #141820; border-bottom: 1px solid #344969; display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .analyse-layers-heading h2 { margin: 0; font-size: 14px; color: #fff; text-transform: none; }
 .analyse-layers-heading > span { color: #b1bed2; font-size: 11px; }
@@ -53,11 +57,11 @@
 .analyse-layer-label { min-width: 0; display: grid; gap: 4px; }
 .analyse-layer-label strong { font-size: 12px; font-weight: 500; overflow-wrap: anywhere; }
 .analyse-layer-label small { color: #b1bed2; font-size: 11px; line-height: 1.4; }
-@media (max-width: 1050px) { .analyse-editor { grid-template-columns: minmax(0, 1fr) 240px; } .analyse-artboard-well { padding: 20px; } }
-@media (max-width: 760px) { .analyse-editor { grid-template-columns: minmax(0, 1fr); } .analyse-layers { position: static; max-height: 340px; border-left: 0; border-top: 1px solid #344969; min-height: 0; } .analyse-artboard-well { padding: 16px; min-height: 180px; } .analyse-toolbar { gap: 8px; } .analyse-view button { padding: 6px; } .analyse-inspector .tag-options { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 1050px) { .analyse-artboard-well { padding: 20px; } }
+@media (max-width: 760px) { .analyse-editor { grid-template-columns: minmax(0, 1fr); } .analyse-layers { position: static; max-height: none; overflow: visible; border-left: 0; border-top: 1px solid #344969; min-height: 0; } .analyse-layers .analyse-inspector { max-height: none; } .analyse-layers .analyse-layer-list { max-height: 280px; } .analyse-artboard-well { padding: 16px; min-height: 180px; } .analyse-toolbar { gap: 8px; } .analyse-view button { padding: 6px; } .analyse-inspector .tag-options { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 .analyse-attention { margin: 0 !important; padding: 12px 16px; border-bottom: 1px solid #344969; color: #fff !important; background: #23344d; font-size: 12px; }
-.analyse-layers { max-height: max(300px, calc(100vh - 280px)); }
-@media(max-width:760px) { .analyse-layers { max-height: 340px; } }
+.analyse-layers { width: auto; }
+@media(max-width:760px) { .analyse-layers { max-height: none; overflow: visible; } }
 .analyse-toolbar label { display: flex; align-items: center; gap: 6px; color: #b1bed2; font-size: 12px; }
 .analyse-toolbar select { max-width: 180px; padding: 6px; color: #fff; border: 1px solid #99abc5; background: #111c2e; border-radius: 4px; }
 .analyse-toolbar input[type=color] { width: 36px; height: 30px; padding: 2px; border: 1px solid #99abc5; background: transparent; }
@@ -72,10 +76,8 @@
 .edge-placement { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; padding: 12px 0; margin-top: 12px; border-top: 1px solid #344969; }
 .edge-placement label { display: flex; gap: 8px; align-items: center; color: #b1bed2; font-size: 12px; }
 .edge-placement select, .edge-placement input[type=number] { background: #111c2e; color: #fff; padding: 6px; border: 1px solid #99abc5; border-radius: 4px; max-width: 170px; }
-.analyse-layers { width: 320px; }
-.analyse-editor { grid-template-columns: minmax(0, 1fr) 320px; }
-@media(max-width:1050px) { .analyse-editor { grid-template-columns: minmax(0, 1fr) 280px; } .analyse-layers { width: 280px; } }
-@media(max-width:760px) { .analyse-editor { grid-template-columns: minmax(0, 1fr); } .analyse-layers { width: 100%; } }
+@media (max-width: 1100px) { .analyse-editor { grid-template-columns: minmax(0, 1fr) minmax(220px, 280px); height: auto; } .analyse-roles { grid-column: 1 / -1; max-height: 42vh; border-right: 0; border-bottom: 1px solid #344969; } .analyse-layers { width: auto; } }
+@media (max-width: 760px) { .analyse-editor { grid-template-columns: minmax(0, 1fr); } .analyse-roles, .analyse-layers { max-height: 48vh; width: 100%; border-left: 0; } .analyse-artboard-well { padding: 16px; min-height: 180px; } }
 .border-options { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; width: 100%; padding: 12px 0; border-top: 1px solid #344969; }
 .border-options label { display: flex; gap: 8px; align-items: center; color: #b1bed2; font-size: 12px; }
 .border-options input[type=number] { width: 72px; background: #111c2e; color: #fff; border: 1px solid #99abc5; border-radius: 4px; padding: 6px; }

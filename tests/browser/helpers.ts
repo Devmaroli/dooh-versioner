@@ -1,5 +1,12 @@
 import { expect, type Page } from '@playwright/test'
 
+export async function settleSave(page: Page) {
+  const chip = page.locator('header .chip')
+  await expect(chip).toHaveText('Saved on this device')
+  await page.waitForTimeout(400)
+  await expect(chip).toHaveText('Saved on this device')
+}
+
 export const guideNames = ['2.6 Screen', 'Al Salam Mall', 'Al Nassar Tower Vertical', 'Alshaheed - Mupi', 'The Gate Mall Outdoor']
 export async function approveGuides(page: Page) {
   await page.getByRole('button', { name: /3 · Adapt/ }).click()

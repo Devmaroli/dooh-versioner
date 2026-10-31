@@ -28,11 +28,11 @@ test('actual MV3 origin works offline, escapes artwork names, persists, exports 
     const id = await item.getAttribute('id'), origin = `chrome-extension://${id}`; await manager.close()
     await context.setOffline(true)
     const popup = await context.newPage(); await popup.goto(`${origin}/popup.html`)
-    await expect(popup.getByText(/v1\.6\.0/)).toBeVisible(); await expect(popup.locator('body')).not.toContainText('Kapildev')
+    await expect(popup.getByText(/v1\.7\.2/)).toBeVisible(); await expect(popup.locator('body')).not.toContainText('Kapildev')
     const opening = context.waitForEvent('page'); await popup.getByRole('link', { name: 'Open Studio', exact: true }).click()
     const page = await opening; await page.waitForURL(`${origin}/index.html`); await expect(page.getByText('Saved on this device')).toBeVisible()
     await expect(page).toHaveTitle('DOOH Creative Studio')
-    await expect(page.getByLabel('Version 1.6.0', { exact: true })).toBeVisible(); await expect(page.locator('body')).not.toContainText('Kapildev')
+    await expect(page.getByLabel('Version 1.7.2', { exact: true })).toBeVisible(); await expect(page.locator('body')).not.toContainText('Kapildev')
     await page.evaluate(() => { const violations: string[] = []; document.addEventListener('securitypolicyviolation', event => violations.push(event.effectiveDirective)); Reflect.set(window, 'violations', violations) })
     const hostile = '<img src="https://invalid.example/leak" onerror="window.injected=true">'
     const psd = writePsdBuffer({ width: 64, height: 64, imageData: pixels([80, 120, 160]), children: [{ name: 'Base texture', left: 0, top: 0, imageData: pixels([80, 120, 160]) }, { name: hostile, left: 0, top: 0, imageData: pixels([160, 80, 40]), blendMode: 'screen', opacity: .5 }] }, { generateThumbnail: false })
@@ -42,7 +42,7 @@ test('actual MV3 origin works offline, escapes artwork names, persists, exports 
     expect(await page.evaluate(() => Reflect.get(window, 'injected'))).toBeUndefined(); await expect(page.locator('img[src^="https:"]')).toHaveCount(0)
     await page.getByRole('button', { name: /3 · Adapt/ }).click(); await expect(page.locator('.calibration-card')).toHaveCount(1)
     await page.getByRole('button', { name: 'Edit Alshaheed - Mupi', exact: true }).click(); await page.getByRole('button', { name: 'Approve this guide', exact: true }).click(); await page.getByRole('button', { name: 'Back to layout previews', exact: false }).click()
-    await page.getByRole('button', { name: 'Use these guides for full adaptation', exact: true }).click(); await page.getByRole('button', { name: /6 · Export/ }).click()
+    await page.getByRole('button', { name: 'Use these guides for full adaptation', exact: true }).click(); await page.getByRole('button', { name: /5 · Export/ }).click()
     for (const format of ['png', 'pdf', 'psd']) {
       await page.getByLabel('Export format', { exact: true }).selectOption(format); page.once('dialog', dialog => dialog.accept())
       const downloading = page.waitForEvent('download'); await page.getByRole('button', { name: format === 'png' ? 'Export review ZIP' : `Export ${format.toUpperCase()} ZIP`, exact: true }).click()
@@ -52,7 +52,7 @@ test('actual MV3 origin works offline, escapes artwork names, persists, exports 
     }
     expect(await page.evaluate(() => Reflect.get(window, 'violations'))).toEqual([])
     await expect(page.getByText('Saved on this device')).toBeVisible(); await page.reload(); await expect(page.getByText('Saved on this device')).toBeVisible()
-    await page.getByRole('button', { name: /6 · Export/ }).click(); await page.screenshot({ path: 'work/chrome-extension-offline.png' })
+    await page.getByRole('button', { name: /5 · Export/ }).click(); await page.screenshot({ path: 'work/chrome-extension-offline.png' })
     const again = await context.newPage(); await again.goto(`${origin}/popup.html`); await again.getByRole('link', { name: 'Open Studio', exact: true }).click()
     expect(context.pages().filter(p => p.url() === `${origin}/index.html`)).toHaveLength(1)
     // A policy violation, rather than an offline network error, proves CSP blocks a connection before dispatch.
@@ -71,7 +71,7 @@ test('private IKEA embedded Illustrator words render offline under the extension
     const page = await context.newPage(), errors: string[] = [], requests: string[] = []; page.on('pageerror', error => errors.push(error.message)); page.on('request', request => { if (/^https?:/.test(request.url())) requests.push(request.url()) })
     await page.goto(`chrome-extension://${id}/index.html`); await expect(page.getByText('Saved on this device')).toBeVisible()
     await page.locator('input[type=file]').setInputFiles(fixture!); await page.getByLabel('Language for ikea.psd').selectOption('EN'); await onlyMupi(page)
-    await page.getByRole('button', { name: 'Continue to Analyse' }).click(); await page.locator('.analyse-layer').nth(6).click(); await page.getByRole('button', { name: 'Main headline', exact: true }).click()
+    await page.getByRole('button', { name: 'Continue to Analyse' }).click(); await page.locator('button.lp-name', { hasText: /^Vector Smart Object$/ }).click(); await page.getByRole('button', { name: 'Main headline', exact: true }).click()
     await page.getByRole('button', { name: /3 · Adapt/ }).click(); await page.getByRole('button', { name: 'Edit Alshaheed - Mupi', exact: true }).click(); await page.getByRole('button', { name: 'Prepare headline words', exact: true }).click()
     await expect(page.locator('.lp-row').filter({ hasText: /Word [0-9]+ · embedded vector/ })).toHaveCount(5)
     await expect(page.locator('.calibration-canvas-frame .proof-canvas canvas')).toHaveAttribute('data-vector-words', '5'); await expect(page.getByRole('alert')).toHaveCount(0)

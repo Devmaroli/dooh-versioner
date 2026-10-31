@@ -33,6 +33,7 @@ test('an offer cannot become headline simply because it is the only editable tex
   const an = Adapt.analyseArtwork(a)
   expect(an.roles.find(r => r.id === 'offer').role).toBe('offer')
   expect(an.roles.some(r => r.role === 'headline')).toBe(false)
+  expect(an.roles.find(r => r.id === 'raster').role).toBe('unassigned')
 })
 
 test('named headline retains priority, and recovery preserves designer corrections over updated heuristics', () => {

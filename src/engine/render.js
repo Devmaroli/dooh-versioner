@@ -16,6 +16,9 @@ import { drawOriginalBorder, borderGeometry } from '../border.js'
 import { allLayers, drawSourceLayers } from '../artwork.js'
 import { proofForScreen, screenProofKey, layoutFamily, calibrationReady, guideLayout, guideFindings, sourceSignature } from '../layoutGuides.js'
 import { readPsd } from 'ag-psd'
+import { parseSvgArtwork } from '../svgDocument.js'
+import { materializeSvgArtwork, relinkImages } from '../svgMaterialize.js'
+import { artworkFromPdf } from '../pdfImport.js'
 import { PRESET_FILES, SAMPLE_PSD_B64, SAMPLE_SVG } from './presets.js'
 
 const MW=1920,MH=1080;
@@ -331,9 +334,16 @@ function bakeFx(src,fx){const px=v=>v==null?0:typeof v==="number"?v:+v.value||0,
   g.drawImage(src,pad,pad);return {c,pad};}
 
 
+function collectFonts(layers, fonts = []) {
+  for (const layer of layers || []) {
+    if (layer.font) fonts.push(layer.font)
+    collectFonts(layer.children, fonts)
+  }
+  return fonts
+}
 function artLoad(a, thumb) {
   validateDimensions(a.w, a.h)
-  const fonts = [...new Set(JSON.stringify(a.layers).match(/"font":"[^"]+"/g) || [])].map((x) => x.slice(8, -1))
+  const fonts = [...new Set(collectFonts(a.layers))]
   const an = Adapt.analyseArtwork(a, fonts.filter(fontOK).concat(['__none__']))
   pxFixStyle(a, an)
   const lr = an.rules.find((r) => r.key === 'lang')
@@ -368,10 +378,34 @@ export function loadSamplePsd() {
   artLoad(psdFromBuf(bin.buffer, 'sample.psd'))
   return ARTS.length
 }
-export function importSvgText(text, name) {
-  artLoad(Adapt.fromSVG(text, name))
-  return ARTS.length
+function keepImportWarnings(art, artwork) {
+  const extra = artwork.warnings || []
+  if (extra.length) art.an.warnings = [...new Set([...(art.an.warnings || []), ...extra])]
+  return art
 }
+export async function importSvgText(text, name, files) {
+  await new Promise(resolve => setTimeout(resolve, 0))
+  const artwork = parseSvgArtwork(text, name, files)
+  await new Promise(resolve => setTimeout(resolve, 0))
+  await materializeSvgArtwork(artwork)
+  return keepImportWarnings(artLoad(artwork), artwork)
+}
+export async function importPdfBuffer(buffer, name, page = 1) {
+  const artwork = await artworkFromPdf(buffer, name, page)
+  await materializeSvgArtwork(artwork)
+  return keepImportWarnings(artLoad(artwork), artwork)
+}
+export async function reloadPdfPage(art, buffer, page) {
+  const artwork = await artworkFromPdf(buffer, art.name, page)
+  await materializeSvgArtwork(artwork)
+  art.a = artwork
+  art.an = Adapt.analyseArtwork(artwork, collectFonts(artwork.layers).filter(fontOK))
+  if (artwork.warnings?.length) art.an.warnings = [...new Set([...(art.an.warnings || []), ...artwork.warnings])]
+  delete art.U
+  delete art.BG
+  return art
+}
+export { relinkImages }
 export function importPsdBuffer(buf, name) {
   artLoad(psdFromBuf(buf, name))
   return ARTS.length
@@ -449,7 +483,7 @@ function drawGuided(ctx,art,screen,proof,capture,omitBackground=false){
   function targetFor(id){const f=layout.find(u=>u.id===id)?.frame;if(f)return {x:f.x*screen.w,y:f.y*screen.h,w:f.w*screen.w,h:f.h*screen.h};if(id==='__background'&&background)return backgroundFrame(background.source,screen,current?.backgroundTransform);if(id==='__border')return borderGeometry(art,screen,layout,current);return {x:0,y:0,w:screen.w,h:screen.h};}
   function paintPixels(g,id,node){
     if(id==='__background'){
-      if(background){const f=targetFor(id),style=appearance({...background.L,parentOpacity:current?.panel?1:background.L.parentOpacity},current?.layerStyles?.[id]),rawBox=art.backgroundRegion?backgroundCrop(art.backgroundRegion,background.L,art.a.w,art.a.h):null,box=rawBox||{x:background.L.box[0],y:background.L.box[1],w:background.L.box[2],h:background.L.box[3]},layer={...background.L,px:background.source,box:[box.x,box.y,box.w,box.h],sourceBox:[box.x,box.y,box.w,box.h],crop:null},source=preparedLayerSource(layer,box,node,art.PA)||background.source;
+      if(background){const f=targetFor(id),style=appearance({...background.L,parentOpacity:current?.panel?ancestors(current.panel,id).reduce((opacity,node)=>opacity*(node.opacity??1),1):background.L.parentOpacity},current?.layerStyles?.[id]),rawBox=art.backgroundRegion?backgroundCrop(art.backgroundRegion,background.L,art.a.w,art.a.h):null,box=rawBox||{x:background.L.box[0],y:background.L.box[1],w:background.L.box[2],h:background.L.box[3]},layer={...background.L,px:background.source,box:[box.x,box.y,box.w,box.h],sourceBox:[box.x,box.y,box.w,box.h],crop:null},source=preparedLayerSource(layer,box,node,art.PA)||background.source;
         compositeDraw(g,t=>{t.save();clipPanelMask(t,node?.mask,f,screen);t.drawImage(source,f.x,f.y,f.w,f.h);t.restore()},style,f);
       }return;
     }
@@ -468,9 +502,9 @@ function drawGuided(ctx,art,screen,proof,capture,omitBackground=false){
     }else for(const layer of sources.filter(l=>unit.layerIds.includes(l.id)).reverse()){
       const view=g.getTransform(),vector=layer.vectorWord&&art.VR?.get(vectorRasterKey(layer,unit.box,target.w*Math.hypot(view.a,view.b),target.h*Math.hypot(view.c,view.d)))
       if(layer.vectorWord&&!vector&&art.requireVector)throw new Error('Vector source preparation is incomplete. Retry the export; no cached-pixel substitution was exported.')
-      if(vector){vectorWordsRendered++;let material=vector;if((node?.fill??1)!==1||node?.fx?.stroke?.enabled){material=document.createElement('canvas');material.width=vector.width;material.height=vector.height;material.getContext('2d').drawImage(vector,0,0);stylePixels(material,node?.fill??1,node?.fx?.stroke?{stroke:{...node.fx.stroke,width:node.fx.stroke.width*vector.width/unit.box.w}}:null)}const style=appearance({...layer,parentOpacity:current?.panel?1:layer.parentOpacity},current?.layerStyles?.[layer.id]||current?.layerStyles?.[layer.wordSourceId]);compositeDraw(g,t=>{t.save();clipPanelMask(t,node?.mask,target,screen);t.drawImage(material,target.x,target.y,target.w,target.h);t.restore()},style,target);continue}
+      if(vector){vectorWordsRendered++;let material=vector;if((node?.fill??1)!==1||node?.fx?.stroke?.enabled){material=document.createElement('canvas');material.width=vector.width;material.height=vector.height;material.getContext('2d').drawImage(vector,0,0);stylePixels(material,node?.fill??1,node?.fx?.stroke?{stroke:{...node.fx.stroke,width:node.fx.stroke.width*vector.width/unit.box.w}}:null)}const style=appearance({...layer,parentOpacity:current?.panel?ancestors(current.panel,id).reduce((opacity,node)=>opacity*(node.opacity??1),1):layer.parentOpacity},current?.layerStyles?.[layer.id]||current?.layerStyles?.[layer.wordSourceId]);compositeDraw(g,t=>{t.save();clipPanelMask(t,node?.mask,target,screen);t.drawImage(material,target.x,target.y,target.w,target.h);t.restore()},style,target);continue}
 
-      const style=appearance({...layer,parentOpacity:current?.panel?1:layer.parentOpacity},current?.layerStyles?.[layer.id]||current?.layerStyles?.[layer.wordSourceId]),material=preparedLayerSource(layer,unit.box,node,art.PA);
+      const style=appearance({...layer,parentOpacity:current?.panel?ancestors(current.panel,id).reduce((opacity,node)=>opacity*(node.opacity??1),1):layer.parentOpacity},current?.layerStyles?.[layer.id]||current?.layerStyles?.[layer.wordSourceId]),material=preparedLayerSource(layer,unit.box,node,art.PA);
       compositeDraw(g,t=>{t.save();clipPanelMask(t,node?.mask,target,screen);if(material)t.drawImage(material,target.x,target.y,target.w,target.h);else{t.translate(target.x,target.y);t.scale(target.w/unit.box.w,target.h/unit.box.h);t.translate(-unit.box.x,-unit.box.y);t.beginPath();t.rect(unit.box.x,unit.box.y,unit.box.w,unit.box.h);t.clip();drawSourceLayers(t,[layer],false,true);}t.restore()},style,target);
     }
   }
