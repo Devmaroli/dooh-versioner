@@ -78,6 +78,6 @@ export function useFreeTransform(options:FreeTransformOptions) {
     schedule();return true
   }
   useEffect(()=>{schedule()})
-  useEffect(()=>{const c=live.current.canvas.current,observer=new ResizeObserver(schedule);if(c){observer.observe(c);window.addEventListener('scroll',schedule,true)}return()=>{window.removeEventListener('scroll',schedule,true);observer.disconnect();removeListeners.current();if(frame.current!==null)cancelAnimationFrame(frame.current);session.current=null}},[options.canvas,!!options.geometry])
+  useEffect(()=>{const c=live.current.canvas.current,observer=new ResizeObserver(schedule);if(c){observer.observe(c);window.addEventListener('scroll',schedule,true)}return()=>{window.removeEventListener('scroll',schedule,true);observer.disconnect();removeListeners.current();if(frame.current!==null)cancelAnimationFrame(frame.current);frame.current=null;session.current=null}},[options.canvas,!!options.geometry])
   return {beginPointer,hitPointer,cancel,isDragging:()=>session.current!==null,refresh:schedule}
 }
