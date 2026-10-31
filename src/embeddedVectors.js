@@ -1,3 +1,4 @@
+import { rasterizeSvgLayer } from './svgMaterialize.js'
 // Embedded PDF-compatible Illustrator sources stay attached to the original PSD.
 // Only explicitly prepared text pieces use this path; logos are never segmented.
 const documents = new WeakMap()
@@ -28,10 +29,11 @@ async function vectorDocument(layer) {
       const pdfDoc=await task.promise,page=await pdfDoc.getPage(source.page||1),base=page.getViewport({scale:1}),viewport=page.getViewport({scale:Math.min(1,1600/Math.max(base.width,base.height))})
       const c=document.createElement('canvas');c.width=Math.ceil(viewport.width);c.height=Math.ceil(viewport.height)
       await page.render({canvasContext:c.getContext('2d'),viewport,background:'rgba(0,0,0,0)'}).promise
-      const ink=inkBounds(c),cached=inkBounds(layer.px),ratio=(ink.w/ink.h)/(cached.w/cached.h)
+      const preview=layer.originalPixels||layer.px
+      const ink=inkBounds(c),cached=inkBounds(preview),ratio=(ink.w/ink.h)/(cached.w/cached.h)
       if(Math.abs(ratio-1)>.025)throw new Error('The embedded Illustrator bounds do not match the PSD preview. Keep the original pixels and review the smart object.')
       const size=128,a=document.createElement('canvas'),b=document.createElement('canvas');a.width=b.width=size;a.height=b.height=Math.max(1,Math.round(size*cached.h/cached.w))
-      a.getContext('2d').drawImage(c,ink.x,ink.y,ink.w,ink.h,0,0,a.width,a.height);b.getContext('2d').drawImage(layer.px,cached.x,cached.y,cached.w,cached.h,0,0,b.width,b.height)
+      a.getContext('2d').drawImage(c,ink.x,ink.y,ink.w,ink.h,0,0,a.width,a.height);b.getContext('2d').drawImage(preview,cached.x,cached.y,cached.w,cached.h,0,0,b.width,b.height)
       const aa=a.getContext('2d').getImageData(0,0,a.width,a.height).data,bb=b.getContext('2d').getImageData(0,0,b.width,b.height).data;let difference=0
       for(let i=0;i<aa.length;i+=4){difference+=Math.abs(aa[i+3]-bb[i+3]);for(let k=0;k<3;k++)difference+=Math.abs(aa[i+k]*aa[i+3]/255-bb[i+k]*bb[i+3]/255)}
       if(difference/(aa.length*255)>.06)throw new Error('The embedded Illustrator artwork differs from the PSD preview. Review the source before replacing cached pixels.')
@@ -43,12 +45,16 @@ async function vectorDocument(layer) {
 export async function verifyEmbeddedVector(layer) { await vectorDocument(layer);return true }
 export function vectorRasterKey(layer,box,w,h) { return JSON.stringify([layer.wordSourceId||layer.id,box,Math.max(1,Math.ceil(w-1e-3)),Math.max(1,Math.ceil(h-1e-3))]) }
 export async function renderVectorCrop(layer,box,w,h) {
+  w = Math.max(1,Math.ceil(w)); h = Math.max(1,Math.ceil(h))
+  if(w*h>40000000)throw new Error('This vector piece exceeds the supported 40 megapixel render buffer.')
+  if (layer.svgShape) return rasterizeSvgLayer({ ...layer, box:[box.x,box.y,box.w,box.h] }, {width:w,height:h})
   const {page,base,ink,cached}=await vectorDocument(layer),[lx,ly,lw,lh]=layer.sourceBox||layer.box
   const x=(box.x-lx)/lw*layer.px.width,y=(box.y-ly)/lh*layer.px.height,cw=box.w/lw*layer.px.width,ch=box.h/lh*layer.px.height
   const rect={x:ink.x+(x-cached.x)/cached.w*ink.w,y:ink.y+(y-cached.y)/cached.h*ink.h,w:cw/cached.w*ink.w,h:ch/cached.h*ink.h}
   const c=document.createElement('canvas');c.width=Math.max(1,Math.ceil(w));c.height=Math.max(1,Math.ceil(h))
-  if(c.width*c.height>40000000)throw new Error('This vector word exceeds the supported 40 megapixel render buffer.')
-  await page.render({canvasContext:c.getContext('2d'),viewport:base,transform:[c.width/rect.w,0,0,c.height/rect.h,-rect.x*c.width/rect.w,-rect.y*c.height/rect.h],background:'rgba(0,0,0,0)'}).promise
+  const context=c.getContext('2d')
+  if(layer.sourceClip){context.setTransform(c.width/box.w,0,0,c.height/box.h,-box.x*c.width/box.w,-box.y*c.height/box.h);context.clip(new Path2D(layer.sourceClip));context.setTransform(1,0,0,1,0,0)}
+  await page.render({canvasContext:context,viewport:base,transform:[c.width/rect.w,0,0,c.height/rect.h,-rect.x*c.width/rect.w,-rect.y*c.height/rect.h],background:'rgba(0,0,0,0)'}).promise
   return c
 }
 

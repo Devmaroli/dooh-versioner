@@ -1,4 +1,16 @@
 import { compositeDraw, layerStyle } from './blending.js'
+const splitPixels = new WeakMap()
+function sourcePiecePixels(layer, piece) {
+  if (!piece.sourceClip) return layer.px
+  let cached = splitPixels.get(piece)
+  if (cached?.source === layer.px) return cached.canvas
+  const canvas = document.createElement('canvas'); canvas.width = layer.px.width; canvas.height = layer.px.height
+  const g = canvas.getContext('2d'), [x,y,w,h] = layer.box
+  g.setTransform(canvas.width/w,0,0,canvas.height/h,-x*canvas.width/w,-y*canvas.height/h)
+  g.clip(new Path2D(piece.sourceClip)); g.drawImage(layer.px,x,y,w,h)
+  splitPixels.set(piece,{source:layer.px,canvas})
+  return canvas
+}
 export function allLayers(art) {
   const visit = (layers, hidden = false, parentOpacity = 1, parents = []) => layers.flatMap(layer => {
     const off = hidden || !(art.layerVisibility?.[layer.id] ?? !layer.hidden)
@@ -9,7 +21,7 @@ export function allLayers(art) {
     const pieces = (art.wordPieces || []).filter(p => p.parentId === layer.id)
     if (!pieces.length || layer.logoProtected) return [layer]
     return [{ ...layer, splitIntoWords: true }, ...pieces.map(piece => ({
-      ...layer, id: piece.id, name: piece.name, box: [piece.crop.x, piece.crop.y, piece.crop.w, piece.crop.h], sourceBox: layer.box,
+      ...layer, originalPixels: layer.px, px: sourcePiecePixels(layer,piece), sourceClip: piece.sourceClip, id: piece.id, name: piece.name, box: [piece.crop.x, piece.crop.y, piece.crop.w, piece.crop.h], sourceBox: layer.box,
       crop: piece.crop, vectorWord: !!piece.vector, wordSourceId: layer.id, effectiveHidden: layer.effectiveHidden || art.layerVisibility?.[piece.id] === false,
     }))]
   })

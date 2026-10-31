@@ -1,3 +1,4 @@
+import { splitSvg } from '../fixtures/split-source.js'
 import { test, expect, chromium, Page } from '@playwright/test'
 import { readPsd, writePsdBuffer } from 'ag-psd'
 import { unzipSync } from 'fflate'
@@ -81,4 +82,28 @@ test('private IKEA embedded Illustrator words render offline under the extension
     await expect(page.locator('.calibration-canvas-frame .proof-canvas canvas')).toHaveAttribute('data-vector-words', '5'); await expect(page.getByRole('alert')).toHaveCount(0)
     await page.screenshot({ path: 'work/chrome-extension-ikea.png' }); expect(requests).toEqual([]); expect(errors).toEqual([])
   } finally { await context.close();removeProfile(folder) }
+})
+
+test('MV3 split tool separates vector words and a nonrectangular border offline', async () => {
+  const extension=path.resolve('dist-extension'), folder=profile()
+  const context=await chromium.launchPersistentContext(folder,{channel:'chromium',headless:true,args:[`--disable-extensions-except=${extension}`,`--load-extension=${extension}`]})
+  try {
+    const manager=await context.newPage();await manager.goto('chrome://extensions')
+    const item=manager.locator('extensions-item').filter({hasText:'DOOH Creative Studio'});await expect(item).toHaveCount(1)
+    const id=await item.getAttribute('id');await manager.close();await context.setOffline(true)
+    const page=await context.newPage();await page.goto(`chrome-extension://${id}/index.html`)
+    await expect(page.getByText('Saved on this device')).toBeVisible()
+    await page.locator('input[type=file]').setInputFiles({name:'split_EN.svg',mimeType:'image/svg+xml',buffer:Buffer.from(splitSvg)})
+    await page.getByRole('button',{name:'Continue to Analyse'}).click()
+    await page.getByRole('button',{name:'source',exact:true}).click()
+    await page.getByRole('button',{name:'Other',exact:true}).click()
+    await page.getByRole('button',{name:/3 · Adapt/}).click()
+    await page.getByRole('button',{name:'Edit Alshaheed - Mupi',exact:true}).click()
+    await page.getByRole('button',{name:'Select layer source',exact:true}).click()
+    await page.getByRole('button',{name:'Split selected layer',exact:true}).click()
+    await expect(page.locator('.lp-row').filter({hasText:/Border 1 · embedded vector/})).toHaveCount(1)
+    await expect(page.locator('.lp-row').filter({hasText:/Part [23] · embedded vector/})).toHaveCount(2)
+    await expect(page.locator('.calibration-canvas-frame canvas')).toHaveAttribute('data-vector-ready','true')
+    await expect(page.getByRole('alert')).toHaveCount(0)
+  } finally {await context.close();removeProfile(folder)}
 })
