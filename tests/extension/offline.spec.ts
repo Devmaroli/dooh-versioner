@@ -32,7 +32,7 @@ test('actual MV3 origin works offline, escapes artwork names, persists, exports 
     const opening = context.waitForEvent('page'); await popup.getByRole('link', { name: 'Open Studio', exact: true }).click()
     const page = await opening; await page.waitForURL(`${origin}/index.html`); await expect(page.getByText('Saved on this device')).toBeVisible()
     await expect(page).toHaveTitle('DOOH Creative Studio')
-    await expect(page.getByLabel('Version 1.7.0', { exact: true })).toBeVisible(); await expect(page.locator('body')).not.toContainText('Kapildev')
+    await expect(page.getByLabel('Version 1.7.1', { exact: true })).toBeVisible(); await expect(page.locator('body')).not.toContainText('Kapildev')
     await page.evaluate(() => { const violations: string[] = []; document.addEventListener('securitypolicyviolation', event => violations.push(event.effectiveDirective)); Reflect.set(window, 'violations', violations) })
     const hostile = '<img src="https://invalid.example/leak" onerror="window.injected=true">'
     const psd = writePsdBuffer({ width: 64, height: 64, imageData: pixels([80, 120, 160]), children: [{ name: 'Base texture', left: 0, top: 0, imageData: pixels([80, 120, 160]) }, { name: hostile, left: 0, top: 0, imageData: pixels([160, 80, 40]), blendMode: 'screen', opacity: .5 }] }, { generateThumbnail: false })

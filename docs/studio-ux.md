@@ -1,4 +1,6 @@
-# Studio UX — 1.7.0
+# Studio UX — 1.7.1
+
+Version 1.7.1 adds persistent Photoshop-style groups, the three-column Analyse layout, and Prepare / split for any layer. See the changelog.
 
 DOOH Creative Studio adapts existing masters to screen presets. It does not invent photography, products, logos, prices, contact details, legal lines or translations.
 

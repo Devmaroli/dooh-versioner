@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.7.1 — 2026-10-31
+
+- Layer groups keep imported nesting, cascade visibility, lock and opacity, and remember whether they are open.
+- Analyse uses three scrolling columns at desktop widths: roles, artwork, and the layer tree.
+- Prepare / split works on any layer. Verified embedded vectors stay labelled as vectors. Raster splits are labelled raster. Logos stay whole until split is allowed.
+
 ## 1.7.0 — 2026-10-31
 
 - Five stages: Import, Analyse, Adapt, Review & edit, and Export. Review and Refine are one stage with an output overview and a focused editor.
