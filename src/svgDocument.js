@@ -1,3 +1,4 @@
+import { svgStyles, svgElement } from './svgStyle.js'
 // Linear SVG reader. It does not use a backtracking expression on the whole file,
 // so a multi-megabyte Illustrator export with embedded images stays parseable.
 
@@ -27,7 +28,7 @@ export function extractEmbeddedImages(svg) {
   const images = []
   let out = ''
   let cursor = 0
-  const markers = ['href=', 'xlink:href=']
+  const markers = ['href', 'xlink:href']
   while (cursor < svg.length) {
     let at = -1, marker = ''
     for (const candidate of markers) {
@@ -36,6 +37,9 @@ export function extractEmbeddedImages(svg) {
     }
     if (at < 0) { out += svg.slice(cursor); break }
     let quoteAt = at + marker.length
+    while (quoteAt < svg.length && /\s/.test(svg[quoteAt])) quoteAt++
+    if (svg[quoteAt] !== '=') { out += svg.slice(cursor, quoteAt); cursor = quoteAt; continue }
+    quoteAt++
     while (quoteAt < svg.length && /\s/.test(svg[quoteAt])) quoteAt++
     const quote = svg[quoteAt]
     if (quote !== '"' && quote !== "'") { out += svg.slice(cursor, at + marker.length); cursor = at + marker.length; continue }
@@ -112,9 +116,9 @@ export function parseSvgTree(svg) {
     stack[stack.length - 1].children.push(node)
     if (!selfClosing && !['path', 'rect', 'circle', 'ellipse', 'line', 'image', 'polygon', 'polyline', 'use'].includes(name)) stack.push(node)
     i = end + 1
-    if (name === 'text' || name === 'tspan') {
+    if (name === 'style' || name === 'text' || name === 'tspan') {
       const close = svg.toLowerCase().indexOf(`</${name}`, i)
-      if (close >= 0) { node.text = svg.slice(i, close).replace(/<[^>]+>/g, ''); i = close }
+      if (close >= 0) { node.text = name === 'style' ? svg.slice(i, close).replace(/^\s*<!\[CDATA\[|\]\]>\s*$/g, '') : svg.slice(i, close).replace(/<[^>]+>/g, ''); i = close }
     }
   }
   return root.children.find(node => node.name === 'svg') || null
@@ -136,6 +140,10 @@ function lengthOf(value, fallback = 0) {
   if (value == null || value === '') return fallback
   const number = parseFloat(String(value).replace(/px|pt$/i, ''))
   return Number.isFinite(number) ? number : fallback
+}
+function opacityOf(value) {
+  const n = lengthOf(value, 1) / (String(value).endsWith('%') ? 100 : 1)
+  return Math.max(0, Math.min(1, n))
 }
 function parseTransform(value) {
   if (!value) return IDENTITY
@@ -165,6 +173,8 @@ function parseTransform(value) {
       const cx = n[1] || 0, cy = n[2] || 0
       local = multiply(multiply([1, 0, 0, 1, cx, cy], [cos, sin, -sin, cos, 0, 0]), [1, 0, 0, 1, -cx, -cy])
     }
+    if (name === 'skewx') local = [1, 0, Math.tan((n[0] || 0) * Math.PI / 180), 1, 0, 0]
+    else if (name === 'skewy') local = [1, Math.tan((n[0] || 0) * Math.PI / 180), 0, 1, 0, 0]
     matrix = multiply(matrix, local)
   }
   return matrix
@@ -220,7 +230,8 @@ export function parseSvgArtwork(svg, file = 'artwork.svg', files = new Map()) {
   const stripped = extractEmbeddedImages(String(svg).replace(/^\uFEFF/, ''))
   const tree = parseSvgTree(stripped.svg)
   if (!tree) throw new Error('This SVG has no svg element.')
-  const rootStyle = styleMap(tree.attrs.style)
+  const styles = svgStyles(tree)
+  const rootStyle = styles.compute(tree)
   const viewBox = (tree.attrs.viewBox || '').trim().split(/[\s,]+/).map(Number)
   const width = viewBox.length === 4 && viewBox[2] > 0 ? viewBox[2] : lengthOf(tree.attrs.width || rootStyle.width)
   const height = viewBox.length === 4 && viewBox[3] > 0 ? viewBox[3] : lengthOf(tree.attrs.height || rootStyle.height)
@@ -228,6 +239,28 @@ export function parseSvgArtwork(svg, file = 'artwork.svg', files = new Map()) {
   const clips = new Map()
   const warnings = []
   let serial = 0
+  const gradients = new Map()
+  function gradient(id, seen = new Set()) {
+    if (gradients.has(id)) return gradients.get(id)
+    const node = styles.ids.get(id)
+    if (!node || !['lineargradient', 'radialgradient'].includes(node.name) || seen.has(id)) return null
+    seen.add(id)
+    const base = gradient(hrefOf(node.attrs).slice(1), seen)
+    const attrs = { ...(base?.attrs || {}), ...node.attrs }
+    delete attrs.href; delete attrs['xlink:href']
+    const ownStops = node.children.filter(c => c.name === 'stop').map(c => styles.original(c))
+    const stops = ownStops.length ? ownStops : base?.stops || []
+    const type = node.name === 'lineargradient' ? 'linearGradient' : 'radialGradient'
+    const value = { type, attrs, stops, svg: svgElement(type, attrs, stops.map(stop => svgElement('stop', stop)).join('')) }
+    gradients.set(id, value)
+    return value
+  }
+  for (const [id, node] of styles.ids) if (node.name.endsWith('gradient')) gradient(id)
+  function paintGradient(value) {
+    const id = (value || '').match(/url\(\s*['"]?#([^)'"\s]+)['"]?\s*\)/)?.[1]
+    return id ? gradients.get(id) || null : null
+  }
+
   function clipFor(attrs) {
     const ref = (attrs['clip-path'] || styleMap(attrs.style)['clip-path'] || '').match(/url\(#([^)]+)\)/)
     return ref ? clips.get(ref[1]) || null : null
@@ -247,7 +280,7 @@ export function parseSvgArtwork(svg, file = 'artwork.svg', files = new Map()) {
     if (node.name === 'circle') { const r = lengthOf(a.r); return [lengthOf(a.cx) - r, lengthOf(a.cy) - r, r * 2, r * 2] }
     if (node.name === 'ellipse') { const rx = lengthOf(a.rx), ry = lengthOf(a.ry); return [lengthOf(a.cx) - rx, lengthOf(a.cy) - ry, rx * 2, ry * 2] }
     if (node.name === 'line') return boxFromPoints([[lengthOf(a.x1), lengthOf(a.y1)], [lengthOf(a.x2), lengthOf(a.y2)]])
-    if (a.d) return pathBounds(shapePath(node))
+    if (a.d || node.name === 'polygon' || node.name === 'polyline') return pathBounds(shapePath(node))
     return [0, 0, 0, 0]
   }
   function elementBox(node, matrix) {
@@ -259,6 +292,7 @@ export function parseSvgArtwork(svg, file = 'artwork.svg', files = new Map()) {
     if (a.d) return a.d
     if (node.name === 'rect') return `M${lengthOf(a.x)} ${lengthOf(a.y)}h${lengthOf(a.width)}v${lengthOf(a.height)}h${-lengthOf(a.width)}z`
     if (node.name === 'circle') { const r = lengthOf(a.r), cx = lengthOf(a.cx), cy = lengthOf(a.cy); return `M${cx - r} ${cy}a${r} ${r} 0 1 0 ${r * 2} 0a${r} ${r} 0 1 0 ${-r * 2} 0` }
+    if (node.name === 'ellipse') { const rx = lengthOf(a.rx), ry = lengthOf(a.ry), cx = lengthOf(a.cx), cy = lengthOf(a.cy); return `M${cx - rx} ${cy}a${rx} ${ry} 0 1 0 ${rx * 2} 0a${rx} ${ry} 0 1 0 ${-rx * 2} 0` }
     if (node.name === 'line') return `M${lengthOf(a.x1)} ${lengthOf(a.y1)}L${lengthOf(a.x2)} ${lengthOf(a.y2)}`
     if (node.name === 'polygon' || node.name === 'polyline') {
       const pairs = (a.points || '').trim().split(/[\s,]+/).map(Number)
@@ -268,23 +302,49 @@ export function parseSvgArtwork(svg, file = 'artwork.svg', files = new Map()) {
     }
     return ''
   }
-  function visit(node, matrix, inheritedClip = null) {
+  function visit(node, matrix, inheritedClip = null, parentStyle = rootStyle, parents = [tree], seen = new Set()) {
     if (node.name === 'defs' || node.name === 'clippath' || node.name === 'style' || node.name === 'metadata') return []
+    const computed = styles.compute(node, parentStyle, parents)
+    if (computed.display === 'none') return []
+    const original = node
+    node = { ...node, attrs: computed }
     const next = multiply(matrix, parseTransform(node.attrs.transform))
+    if (node.name === 'use') {
+      const id = hrefOf(node.attrs).slice(1), target = styles.ids.get(id)
+      if (!hrefOf(node.attrs).startsWith('#') || !target || seen.has(id)) { warnings.push(`Unresolved or cyclic SVG use ${id}. Needs review.`); return [] }
+      const chain = new Set(seen); chain.add(id)
+      let placement = multiply(next, [1, 0, 0, 1, lengthOf(node.attrs.x), lengthOf(node.attrs.y)])
+      if (target.name === 'symbol') {
+        const vb = (target.attrs.viewBox || '').split(/[\s,]+/).map(Number)
+        if (vb.length === 4 && vb[2] > 0 && vb[3] > 0) {
+          const sx = lengthOf(node.attrs.width, vb[2]) / vb[2], sy = lengthOf(node.attrs.height, vb[3]) / vb[3]
+          const aspect = target.attrs.preserveAspectRatio || 'xMidYMid meet'
+          const scale = aspect.includes('slice') ? Math.max(sx, sy) : Math.min(sx, sy)
+          const scaleX = aspect === 'none' ? sx : scale, scaleY = aspect === 'none' ? sy : scale
+          const alignX = aspect.includes('xMax') ? 1 : aspect.includes('xMin') ? 0 : .5
+          const alignY = aspect.includes('YMax') ? 1 : aspect.includes('YMin') ? 0 : .5
+          placement = multiply(placement, [scaleX, 0, 0, scaleY, (lengthOf(node.attrs.width, vb[2]) - vb[2] * scaleX) * alignX - vb[0] * scaleX, (lengthOf(node.attrs.height, vb[3]) - vb[3] * scaleY) * alignY - vb[1] * scaleY])
+        }
+      }
+      const children = visit(target, placement, inheritedClip, computed, [...parents, original], chain)
+      if (!children.length) return []
+      return [{ id: `svg${serial++}`, name: node.attrs.id || 'Use', kind: 'group', box: union(children), opacity: opacityOf(computed.opacity), children, sourceKind: 'svg-group' }]
+    }
     const clip = clipFor(node.attrs) || inheritedClip
     const style = styleMap(node.attrs.style)
-    const opacity = lengthOf(node.attrs.opacity ?? style.opacity, 1)
+    const opacity = opacityOf(node.attrs.opacity ?? style.opacity)
     if (node.name === 'g' || node.name === 'svg' || node.name === 'symbol' || node.name === 'a') {
-      const children = node.children.flatMap(child => visit(child, next, clip))
-      if (node.name !== 'g' || !children.length) return children
+      const children = node.children.flatMap(child => visit(child, next, clip, computed, [...parents, original], seen))
+      if (node.name !== 'g' && opacity === 1 || !children.length) return children
       const box = union(children)
       return [{ id: `svg${serial++}`, name: node.attrs['inkscape:label'] || node.attrs.id || 'Group', kind: 'group', box, opacity, children, sourceKind: 'svg-group' }]
     }
+    if (computed.visibility === 'hidden' || computed.visibility === 'collapse') return []
     if (node.name === 'image') {
       const source = imageSource(hrefOf(node.attrs), stripped.images)
       let box = elementBox(node, next)
       if (!(box[2] > 0) || !(box[3] > 0)) box = [lengthOf(node.attrs.x), lengthOf(node.attrs.y), 32, 32]
-      const layer = { id: `svg${serial++}`, name: node.attrs['inkscape:label'] || node.attrs.id || source.linkName || 'Image', kind: 'image', box, localBox: localBox(node), opacity, clip, transform: next, sourceKind: source.imageSource || 'linked', imageSource: source.imageSource || 'linked', linkName: source.linkName || '', missingLink: !!source.missingLink, remote: !!source.remote }
+      const layer = { id: `svg${serial++}`, name: node.attrs['inkscape:label'] || node.attrs.id || source.linkName || 'Image', kind: 'image', box, localBox: localBox(node), opacity, preserveAspectRatio: computed.preserveAspectRatio || 'xMidYMid meet', clip, transform: next, sourceKind: source.imageSource || 'linked', imageSource: source.imageSource || 'linked', linkName: source.linkName || '', missingLink: !!source.missingLink, remote: !!source.remote }
       if (source.embedded) layer.embeddedImage = source.embedded
       if (source.warning) warnings.push(source.warning)
       if (source.linkName && !source.remote && !source.embedded) {
@@ -302,18 +362,26 @@ export function parseSvgArtwork(svg, file = 'artwork.svg', files = new Map()) {
       const x = lengthOf(node.attrs.x), y = lengthOf(node.attrs.y)
       const width = Math.max(size, text.length * size * 0.55)
       const local = [anchor === 'middle' ? x - width / 2 : anchor === 'end' ? x - width : x, y - size, width, size * 1.25]
-      return [{ id: `svg${serial++}`, name: node.attrs.id || text.slice(0, 32), kind: 'text', text, font: (node.attrs['font-family'] || style['font-family'] || 'sans-serif').split(',')[0].replace(/['"]/g, '').trim(), size, color: paint(node.attrs, style, 'fill') || '#111', box: boxFromPoints(corners(next, ...local)), opacity, transform: next, sourceKind: 'svg-text' }]
+      return [{ id: `svg${serial++}`, name: node.attrs.id || text.slice(0, 32), kind: 'text', text, font: (node.attrs['font-family'] || style['font-family'] || 'serif').split(',')[0].replace(/['"]/g, '').trim(), size, fontWeight: computed['font-weight'] || 'normal', fontStyle: computed['font-style'] || 'normal', textX: x, textY: y, textAnchor: anchor || 'start', fillGradient: paintGradient(computed.fill), strokeGradient: paintGradient(computed.stroke), svgFillOpacity: opacityOf(computed['fill-opacity']), svgStrokeOpacity: opacityOf(computed['stroke-opacity']), stroke: computed.stroke || 'none', strokeWidth: lengthOf(computed['stroke-width'], 1), fontStatus: 'unresolved', editable: false, color: paint(node.attrs, style, 'fill') || '#000', box: boxFromPoints(corners(next, ...local)), opacity, transform: next, sourceKind: 'svg-text' }]
     }
     if (DRAWING.has(node.name)) {
       const d = shapePath(node)
-      const box = elementBox(node, next)
+      let box = elementBox(node, next)
+      const strokeWidth = computed.stroke && computed.stroke !== 'none' ? lengthOf(computed['stroke-width'], 1) : 0
+      if (strokeWidth) {
+        const [x, y, w, h] = localBox(node), pad = strokeWidth / 2
+        box = boxFromPoints(corners(next, x - pad, y - pad, w + pad * 2, h + pad * 2))
+      }
       if (!(box[2] > 0) || !(box[3] > 0)) return []
-      return [{ id: `svg${serial++}`, name: node.attrs['inkscape:label'] || node.attrs.id || node.name, kind: 'shape', pathData: d, fill: paint(node.attrs, style, 'fill') || '#000', stroke: paint(node.attrs, style, 'stroke'), strokeWidth: lengthOf(node.attrs['stroke-width'] || style['stroke-width'], 1), box, opacity, clip, transform: next, sourceKind: 'svg-path' }]
+      return [{ id: `svg${serial++}`, name: node.attrs['inkscape:label'] || node.attrs.id || node.name, kind: 'shape', pathData: d, fill: paint(node.attrs, style, 'fill') || '#000', stroke: paint(node.attrs, style, 'stroke'), strokeWidth: lengthOf(node.attrs['stroke-width'] || style['stroke-width'], 1), localBox: localBox(node), fillGradient: paintGradient(computed.fill), strokeGradient: paintGradient(computed.stroke), svgShape: svgElement(node.name, { ...computed, opacity: 1, transform: null }), box, opacity, clip, transform: next, sourceKind: 'svg-path' }]
     }
-    return node.children.flatMap(child => visit(child, next, clip))
+    return node.children.flatMap(child => visit(child, next, clip, computed, [...parents, original], seen))
   }
-  const layers = tree.children.flatMap(child => visit(child, IDENTITY))
-  return { w: width, h: height, topFirst: true, layers, warnings, source: { format: 'svg', file } }
+  const origin = viewBox.length === 4 ? [1, 0, 0, 1, -viewBox[0], -viewBox[1]] : IDENTITY
+  const layers = visit(tree, origin, null, {}, [])
+  function topFirst(nodes) { nodes.reverse(); for (const node of nodes) if (node.children) topFirst(node.children) }
+  topFirst(layers)
+  return { w: width, h: height, topFirst: true, layers, warnings, fontFiles: [...files.values()].filter(file => /\.(otf|ttf)$/i.test(file.name)), source: { format: 'svg', file } }
 }
 
 function union(layers) {

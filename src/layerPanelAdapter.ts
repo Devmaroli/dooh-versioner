@@ -7,7 +7,7 @@ export function panelForArtwork(art: any, layout: any[], proof: any): LayerPanel
   const styleFor = (source: any, key: string) => ({ blendMode: normalizeBlend(proof?.layerStyles?.[source?.id]?.blend ?? proof?.layerStyles?.[key]?.blend ?? source?.blend ?? source?.sourceBlend ?? 'normal'), opacity: proof?.layerStyles?.[source?.id]?.opacity ?? proof?.layerStyles?.[key]?.opacity ?? source?.opacity ?? 1 })
   const parent = (source: any) => source?.parentGroups?.length ? `psd:${source.parentGroups[source.parentGroups.length-1].id}` : null
   const base = (id: string, name: string, source: any, type: LayerRecord['type'], memberIds: string[], sourceIds: string[]): LayerRecord => ({
-    id,name,type,parentId:parent(source),visible:!source?.effectiveHidden,...styleFor(source,id),fill:source?.fillOpacity??1,
+    id,name,type,fontStatus:source?.fontStatus,requestedFont:source?.requestedFont,parentId:parent(source),visible:!source?.effectiveHidden,...styleFor(source,id),fill:source?.fillOpacity??1,
     locks:{...unlocked(),...source?.locks},mask:source?.mask || null,sourceIds,memberIds,importedEffects:source?.effects || null,
   })
   for (const source of sources.filter(l=>l.children?.length)) templates.push({ ...base(`psd:${source.id}`,source.name,source,'group',[],[source.id]), importedGroup:true, visible:!source.hidden, blendMode:source.sourceBlend==='pass through'?'pass-through':normalizeBlend(source.sourceBlend||'normal') })
@@ -40,6 +40,7 @@ export function sourcePanel(art: any): LayerPanelState {
       const group = !!layer.children?.length
       const id = group ? `psd:${layer.id}` : layer.id
       templates.push({
+        fontStatus: layer.fontStatus, requestedFont: layer.requestedFont,
         id, name: layer.name || 'Layer', type: group ? 'group' : layer.kind === 'text' ? 'text' : layer.kind === 'shape' ? 'vector' : 'pixel',
         parentId, visible: art.layerVisibility?.[layer.id] !== false && !layer.hidden,
         blendMode: layer.sourceBlend === 'pass through' ? 'pass-through' : (layer.blend || layer.sourceBlend || 'normal'),

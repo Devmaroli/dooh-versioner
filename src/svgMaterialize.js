@@ -1,3 +1,5 @@
+import { svgElement } from './svgStyle.js'
+import { resolveFont } from './fontResolve.js'
 let worker
 let sequence = 0
 const pending = new Map()
@@ -28,6 +30,7 @@ export function decodeImageOffThread(base64, mime) {
 
 async function canvasFromDecode(result) {
   const canvas = document.createElement('canvas')
+  canvas.sourceAspect = result.sourceAspect
   canvas.width = result.width
   canvas.height = result.height
   const image = new ImageData(new Uint8ClampedArray(result.buffer), result.width, result.height)
@@ -38,9 +41,11 @@ async function canvasFromDecode(result) {
 async function canvasFromBytes(bytes, mime) {
   const bitmap = await createImageBitmap(new Blob([bytes], { type: mime || 'image/png' }))
   const canvas = document.createElement('canvas')
-  canvas.width = bitmap.width
-  canvas.height = bitmap.height
-  canvas.getContext('2d').drawImage(bitmap, 0, 0)
+  canvas.sourceAspect = bitmap.width / bitmap.height
+  const scale = Math.min(1, 4096 / Math.max(bitmap.width, bitmap.height))
+  canvas.width = Math.max(1, Math.ceil(bitmap.width * scale))
+  canvas.height = Math.max(1, Math.ceil(bitmap.height * scale))
+  canvas.getContext('2d').drawImage(bitmap, 0, 0, canvas.width, canvas.height)
   bitmap.close?.()
   return canvas
 }
@@ -77,12 +82,36 @@ export function placeRaster(source, layer) {
   const matrix = layer.transform || [1, 0, 0, 1, 0, 0]
   context.transform(matrix[0], matrix[1], matrix[2], matrix[3], matrix[4], matrix[5])
   const [x, y, w, h] = layer.localBox || [0, 0, source.width, source.height]
-  context.drawImage(source, x, y, w || source.width, h || source.height)
+  let dw = w || source.width, dh = h || source.height, dx = x, dy = y
+  const aspect = layer.preserveAspectRatio
+  if (aspect && aspect !== 'none') {
+    const intrinsicRatio = source.sourceAspect || source.width / source.height
+    const ratio = aspect.includes('slice') ? Math.max(dw / intrinsicRatio, dh) : Math.min(dw / intrinsicRatio, dh)
+    const width = intrinsicRatio * ratio, height = ratio
+    dx += (dw - width) * (aspect.includes('xMax') ? 1 : aspect.includes('xMin') ? 0 : .5)
+    dy += (dh - height) * (aspect.includes('YMax') ? 1 : aspect.includes('YMin') ? 0 : .5)
+    context.beginPath(); context.rect(x, y, dw, dh); context.clip()
+    dw = width; dh = height
+  }
+  context.drawImage(source, dx, dy, dw, dh)
   return canvas
 }
 
 export async function rasterizeSvgLayer(layer) {
   if (typeof document === 'undefined') return null
+  if (layer.kind === 'text' && !layer.px) {
+    if (!layer.editable) return null
+    const probe = document.createElement('canvas').getContext('2d')
+    probe.font = `${layer.fontStyle || 'normal'} ${layer.fontWeight || 'normal'} ${layer.size || 16}px ${layer.fontStatus === 'generic' ? layer.font : JSON.stringify(layer.font)}`
+    const metrics = probe.measureText(layer.text || '')
+    const width = metrics.width, size = layer.size || 16
+    const x = (layer.textX || 0) - (layer.textAnchor === 'middle' ? width / 2 : layer.textAnchor === 'end' ? width : 0)
+    layer.localBox = [x - 1, (layer.textY || 0) - Math.max(size, metrics.actualBoundingBoxAscent) - 1, width + 2, Math.max(size, metrics.actualBoundingBoxAscent) + Math.max(size * .3, metrics.actualBoundingBoxDescent) + 2]
+    const m = layer.transform || [1, 0, 0, 1, 0, 0], [lx, ly, lw, lh] = layer.localBox
+    const points = [[lx, ly], [lx + lw, ly], [lx, ly + lh], [lx + lw, ly + lh]].map(([a, b]) => [m[0]*a+m[2]*b+m[4], m[1]*a+m[3]*b+m[5]])
+    const xs = points.map(p => p[0]), ys = points.map(p => p[1])
+    layer.box = [Math.min(...xs), Math.min(...ys), Math.max(...xs)-Math.min(...xs), Math.max(...ys)-Math.min(...ys)]
+  }
   const [x, y, w, h] = layer.box || [0, 0, 1, 1]
   if (!(w > 0) || !(h > 0)) return null
   const canvas = document.createElement('canvas')
@@ -91,14 +120,47 @@ export async function rasterizeSvgLayer(layer) {
   canvas.height = Math.max(1, Math.ceil(h * scale))
   const context = canvas.getContext('2d')
   context.setTransform(scale, 0, 0, scale, -x * scale, -y * scale)
-  context.globalAlpha = layer.opacity ?? 1
+  // Layer opacity is applied by the shared compositor, once.
   if (layer.clip?.d) { context.clip(new Path2D(layer.clip.d)) }
   else if (layer.clip?.rect) { const [cx, cy, cw, ch] = layer.clip.rect; context.beginPath(); context.rect(cx, cy, cw, ch); context.clip() }
+  if (layer.svgShape) {
+    const defs = [...new Set([layer.fillGradient?.svg, layer.strokeGradient?.svg].filter(Boolean))].join('')
+    const m = layer.transform || [1, 0, 0, 1, 0, 0]
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${canvas.width}" height="${canvas.height}" viewBox="${x} ${y} ${w} ${h}"><defs>${defs}</defs><g transform="matrix(${m.join(' ')})">${layer.svgShape}</g></svg>`
+    const url = URL.createObjectURL(new Blob([svg], { type: 'image/svg+xml' }))
+    try {
+      const image = new Image()
+      image.src = url
+      await image.decode()
+      context.setTransform(1, 0, 0, 1, 0, 0)
+      context.drawImage(image, 0, 0, canvas.width, canvas.height)
+    } finally { URL.revokeObjectURL(url) }
+    return canvas
+  }
   if (layer.kind === 'text') {
-    context.fillStyle = layer.color || '#111'
-    context.font = `${layer.size || 16}px ${layer.font || 'sans-serif'}`
-    context.textBaseline = 'alphabetic'
-    context.fillText(layer.text || '', layer.box[0], layer.box[1] + (layer.size || 16))
+    if (!layer.editable) return null
+    for (const stroke of [false, true]) {
+      const colour = stroke ? layer.stroke : layer.color || '#000'
+      if (!colour || colour === 'none') continue
+      const gradient = stroke ? layer.strokeGradient : layer.fillGradient
+      const part = document.createElement('canvas'); part.width = canvas.width; part.height = canvas.height
+      const g = part.getContext('2d'), m = layer.transform || [1, 0, 0, 1, 0, 0]
+      g.setTransform(scale, 0, 0, scale, -x * scale, -y * scale); g.transform(...m)
+      g.font = `${layer.fontStyle || 'normal'} ${layer.fontWeight || 'normal'} ${layer.size || 16}px ${layer.fontStatus === 'generic' ? layer.font : JSON.stringify(layer.font)}`
+      g.textBaseline = 'alphabetic'
+      g.textAlign = layer.textAnchor === 'middle' ? 'center' : layer.textAnchor === 'end' ? 'right' : 'left'
+      g.globalAlpha = (stroke ? layer.svgStrokeOpacity : layer.svgFillOpacity) ?? 1
+      g.fillStyle = g.strokeStyle = gradient ? '#fff' : colour
+      g.lineWidth = layer.strokeWidth || 1
+      if (stroke) g.strokeText(layer.text || '', layer.textX || 0, layer.textY || 0)
+      else g.fillText(layer.text || '', layer.textX || 0, layer.textY || 0)
+      if (gradient) {
+        const [lx, ly, lw, lh] = layer.localBox
+        const paint = await rasterizeSvgLayer({ kind: 'shape', box: layer.box, transform: layer.transform, fillGradient: gradient, svgShape: svgElement('rect', { x: lx, y: ly, width: lw, height: lh, fill: `url(#${gradient.attrs.id})` }) })
+        g.setTransform(1, 0, 0, 1, 0, 0); g.globalAlpha = 1; g.globalCompositeOperation = 'source-in'; g.drawImage(paint, 0, 0)
+      }
+      context.setTransform(1, 0, 0, 1, 0, 0); context.drawImage(part, 0, 0)
+    }
     return canvas
   }
   if (!layer.pathData) return canvas
@@ -159,12 +221,17 @@ export async function materializeSvgArtwork(artwork) {
         layer.decodeError = true
         artwork.warnings = [...(artwork.warnings || []), `Embedded image ${layer.name || 'image'} could not be read. Needs review.`]
       }
-    } else if (layer.kind === 'shape' || layer.kind === 'text') {
+    } else if ((layer.kind === 'shape' || layer.kind === 'text') && !layer.px) {
+      if (layer.kind === 'text') {
+        await resolveFont(layer, artwork.fontFiles)
+        if (layer.fontStatus === 'missing') artwork.warnings.push(`Font ${layer.requestedFont} unavailable for ${layer.name}. Needs review. Supply the original font; no substitute rendered.`)
+      }
       const canvas = await rasterizeSvgLayer(layer)
       if (canvas) Object.defineProperty(layer, 'px', { value: canvas, enumerable: false })
     }
     if (index % 12 === 11) await new Promise(resolve => setTimeout(resolve, 0))
   }
+  delete artwork.fontFiles
   return artwork
 }
 

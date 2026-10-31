@@ -198,6 +198,7 @@ export function guideFindings(art, screen, layout, proof = proofForScreen(art,sc
   }
   if (!art.backgroundRegion) issues.push({ blocked: false, message: 'No reusable background patch confirmed. Inspect background quality.' })
   for (const layer of allLayers(art)) if (layer.missingLink) issues.push({ blocked: false, message: `Missing linked image ${layer.linkName || layer.name}. Needs review. Relink the file. Remote images are not downloaded.` })
+  for (const layer of allLayers(art)) if (['missing', 'outlined'].includes(layer.fontStatus)) issues.push({ blocked: layer.fontStatus === 'missing', message: `${layer.name}: ${layer.fontStatus === 'outlined' ? 'text outlined, not editable' : `Font ${layer.requestedFont || layer.font} unavailable; no substitute rendered`}. Needs review.` })
   const originalBorder = borderGeometry(art, screen, layout, proof), border=originalBorder?rectBounds(originalBorder,proof?.transforms?.__border):null
   if (border && (border.x < 0 || border.y < 0 || border.x + border.w > screen.w || border.y + border.h > screen.h)) issues.push({ blocked: false, message: 'The border extends outside the canvas. Inspect its visible edges.' })
   if (border && (border.w <= 0 || border.h <= 0)) issues.push({ blocked: true, message: 'The stamp leaves no usable space for the border. Move or scale it.' })

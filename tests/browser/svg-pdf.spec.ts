@@ -16,6 +16,7 @@ test('svg and pdf imports keep vectors, embedded images and a relink for a missi
   const remote: string[] = []
   page.on('request', request => {
     const url = new URL(request.url())
+    if (url.protocol === 'blob:' && url.origin === 'http://127.0.0.1:4173') return
     if (url.hostname === '127.0.0.1' || url.hostname === 'localhost' || url.hostname === 'fonts.googleapis.com' || url.hostname === 'fonts.gstatic.com') return
     remote.push(request.url())
   })

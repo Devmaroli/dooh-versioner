@@ -1,3 +1,5 @@
+import { pdfPaintLayers } from './pdfPaint.js'
+import { resolveFont } from './fontResolve.js'
 import * as pdfjs from 'pdfjs-dist'
 import workerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url'
 
@@ -115,7 +117,7 @@ async function imagesFromOperators(page, operators, pageHeight) {
       const left = Math.min(...xs), top = Math.min(...ys)
       clip = { rect: [left, top, Math.max(...xs) - left, Math.max(...ys) - top] }
     } else if (fn === pdfApi.OPS.paintImageXObject || fn === pdfApi.OPS.paintImageMaskXObject || fn === pdfApi.OPS.paintInlineImageXObject) {
-      found.push({ args, inline: fn === pdfApi.OPS.paintInlineImageXObject, ctm: [...ctm], alpha, clip })
+      found.push({ index, args, inline: fn === pdfApi.OPS.paintInlineImageXObject, ctm: [...ctm], alpha, clip })
     }
   }
   const layers = []
@@ -127,7 +129,7 @@ async function imagesFromOperators(page, operators, pageHeight) {
     const pixels = snapshotImage(data)
     if (!pixels) continue
     const placement = pdfImagePlacement(image.ctm, pixels.width, pixels.height, pageHeight)
-    layers.push({ kind: 'image', name: `Image ${layers.length + 1}`, box: placement.box, localBox: placement.localBox, transform: placement.matrix, opacity: image.alpha, clip: image.clip, imageSource: 'embedded', sourceKind: 'embedded', embeddedImage: pixels })
+    layers.push({ operatorIndex: image.index, kind: 'image', name: `Image ${layers.length + 1}`, box: placement.box, localBox: placement.localBox, transform: placement.matrix, opacity: image.alpha, clip: image.clip, imageSource: 'embedded', sourceKind: 'embedded', embeddedImage: pixels })
   }
   return layers
 }
@@ -135,7 +137,7 @@ async function imagesFromOperators(page, operators, pageHeight) {
 export async function artworkFromPdf(data, file = 'artwork.pdf', pageNumber = 1) {
   await configurePdf()
   const bytes = data instanceof Uint8Array ? data.slice() : new Uint8Array(data)
-  const pdf = await pdfApi.getDocument({ data: bytes, isEvalSupported: false, useSystemFonts: false, useWorkerFetch: false, useWasm: false, disableRange: true, disableStream: true, disableAutoFetch: true }).promise
+  const pdf = await pdfApi.getDocument({ data: bytes, fontExtraProperties: true, isEvalSupported: false, useSystemFonts: false, useWorkerFetch: false, useWasm: false, disableRange: true, disableStream: true, disableAutoFetch: true }).promise
   const safePage = Math.min(pdf.numPages, Math.max(1, pageNumber || 1))
   const page = await pdf.getPage(safePage)
   const viewport = page.getViewport({ scale: 1 })
@@ -151,17 +153,28 @@ export async function artworkFromPdf(data, file = 'artwork.pdf', pageNumber = 1)
     const boxWidth = item.width || item.str.length * size * 0.5
     const x = transform[4]
     const y = height - transform[5] - size
-    layers.push({ id: `pdf${serial++}`, name: item.str.slice(0, 40), kind: 'text', text: item.str, font: item.fontName, size, box: [x, y, boxWidth, size], color: '#111', sourceKind: 'pdf-text' })
+    layers.push({ id: `pdf${serial++}`, name: item.str.slice(0, 40), kind: 'text', text: item.str, font: item.fontName, pdfFontId: item.fontName, fontStatus: 'unresolved', editable: false, size, box: [x, y, boxWidth, size], color: '#111', sourceKind: 'pdf-text' })
   }
   try {
     const operators = await page.getOperatorList()
+    if (typeof document !== 'undefined') {
+      const native = await pdfPaintLayers(page, operators, pdfApi, width, height, warnings)
+      for (let i = layers.length - 1; i >= 0; i--) if (layers[i].kind === 'text') layers.splice(i, 1)
+      for (const layer of native) { layer.id = `pdf${serial++}`; layers.push(layer) }
+    } else {
+      for (const layer of layers) {
+        const font = page.commonObjs.get(layer.pdfFontId)
+        layer.font = font.name || font.loadedName
+        await resolveFont(layer)
+      }
+    }
     for (let index = 0; index < operators.fnArray.length; index++) {
       if (operators.fnArray[index] !== pdfApi.OPS.constructPath) continue
       const packed = operators.argsArray[index]?.[0]
       if (!Array.isArray(packed)) continue
       const path = pathFromDrawOps(packed)
       if (!path || !(path.box[2] > 0.5) || !(path.box[3] > 0.5)) continue
-      layers.push({ id: `pdf${serial++}`, name: `Path ${serial}`, kind: 'shape', pathData: path.d, fill: '#222', box: flipBox(path.box, height), sourceKind: 'pdf-path', pdfFlip: true })
+      layers.push({ id: `pdf${serial++}`, name: `Path ${serial}`, kind: 'shape', pathData: path.d, fill: '#222', box: flipBox(path.box, height), operatorIndex: index, sourceKind: 'pdf-path', pdfFlip: true })
     }
     for (const image of await imagesFromOperators(page, operators, height)) {
       image.id = `pdf${serial++}`
@@ -183,6 +196,7 @@ export async function artworkFromPdf(data, file = 'artwork.pdf', pageNumber = 1)
     layers.push({ id: 'pdf-raster', name: 'Page raster', kind: 'image', box: [0, 0, width, height], sourceKind: 'raster', imageSource: 'embedded' })
     Object.defineProperty(layers[0], 'px', { value: canvas, enumerable: false })
   }
+  layers.sort((a, b) => (b.operatorIndex ?? -1) - (a.operatorIndex ?? -1))
   const pageCount = pdf.numPages
   if (typeof pdf.destroy === 'function') await pdf.destroy()
   else { await pdf.cleanup?.(); await pdf.loadingTask?.destroy?.() }

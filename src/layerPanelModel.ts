@@ -8,6 +8,7 @@ export type LayerRecord = {
   fx?: { stroke?: { enabled: boolean; color: string; width: number; opacity: number } }
   adjustment?: { brightness: number; contrast: number }; empty?: boolean; deleted?: boolean
   originId?: string; role?: string; sourceKind?: string; linkId?: string; sourceLink?: boolean
+  fontStatus?: string; requestedFont?: string
   expanded?: boolean
 }
 export type LayerPanelState = { version: 1; nodes: LayerRecord[] }
