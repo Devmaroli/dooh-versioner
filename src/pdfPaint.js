@@ -3,7 +3,7 @@ import { resolveFont } from './fontResolve.js'
 // Keep graphics-state/clip operators, but paint only one requested operation.
 // pdf.js supplies PDF font encodings, glyph geometry and shading colour spaces.
 export async function pdfPaintLayers(page, operators, api, width, height, warnings) {
-  const layers = [], fonts = new Map(), stack = []
+  const layers = [], fonts = new Map(), stack = [], pathSources = new WeakMap()
   let fontId = ''
 
   const textOps = new Set(['showText', 'showSpacedText', 'nextLineShowText', 'nextLineSetSpacingShowText'].map(key => api.OPS[key]))
@@ -25,6 +25,13 @@ export async function pdfPaintLayers(page, operators, api, width, height, warnin
           // disabling the FontFace. Merely toggling this flag draws no glyphs.
           await page._transport.messageHandler.sendWithPromise('FontFallback', { id: fontId })
           layer.fontStatus = 'outlined'; original.disableFontFace = true
+          const getPath = original.getPathGenerator.bind(original)
+          original.getPathGenerator = (objects, character) => {
+            const source = objects.get(`${original.loadedName}_path_${character}`)
+            const path = getPath(objects, character)
+            if (source?.path) pathSources.set(path, Array.from(source.path))
+            return path
+          }
         }
         if (layer.fontStatus === 'local') Object.defineProperty(original, 'systemFontInfo', { value: { css: JSON.stringify(layer.font) } })
         delete layer.fontData
@@ -43,14 +50,24 @@ export async function pdfPaintLayers(page, operators, api, width, height, warnin
     const scale = Math.min(2, 4096 / Math.max(width, height)), viewport = page.getViewport({ scale })
     const canvas = document.createElement('canvas')
     canvas.width = Math.ceil(viewport.width); canvas.height = Math.ceil(viewport.height)
-    const context = canvas.getContext('2d')
+    const context = canvas.getContext('2d'), outlines = []
     let painting = false
     // Execute every text advance and clip. Suppress only paint calls, otherwise
     // skipping an earlier Tj would move all later glyphs to the wrong position.
     const methods = ['fill', 'stroke', 'fillText', 'strokeText', 'fillRect', 'strokeRect', 'drawImage']
     for (const method of methods) {
       const original = context[method].bind(context)
-      context[method] = (...args) => { if (painting) return original(...args) }
+      context[method] = (...args) => {
+        if (!painting) return
+        if (status === 'outlined' && (method === 'fill' || method === 'stroke')) {
+          const commands = pathSources.get(args[0])
+          if (commands) {
+            const m = context.getTransform()
+            outlines.push({ commands, transform: [m.a / scale, m.b / scale, m.c / scale, m.d / scale, m.e / scale, m.f / scale], paint: method, color: method === 'fill' ? context.fillStyle : context.strokeStyle, opacity: context.globalAlpha, lineWidth: context.lineWidth })
+          }
+        }
+        return original(...args)
+      }
     }
     await page.render({ canvasContext: context, viewport, background: 'rgba(0,0,0,0)', operationsFilter: i => { painting = i === index; return true } }).promise
     const ctx = canvas.getContext('2d'), pixels = ctx.getImageData(0, 0, canvas.width, canvas.height)
@@ -67,7 +84,7 @@ export async function pdfPaintLayers(page, operators, api, width, height, warnin
       const id = args[0], store = String(id).startsWith('g_') ? page.commonObjs : page.objs
       if (store.has(id)) shading = store.get(id)
     }
-    const layer = { ...(font || {}), operatorIndex: index, kind: isText ? 'text' : 'shape', name: isText ? content.slice(0, 40) : 'PDF gradient', text: content || undefined, box: [left / scale, top / scale, cropped.width / scale, cropped.height / scale], sourceKind: isText ? 'pdf-text' : 'pdf-shading', editable: isText && status !== 'outlined', shading }
+    const layer = { ...(font || {}), operatorIndex: index, kind: isText ? 'text' : 'shape', name: isText ? content.slice(0, 40) : 'PDF gradient', text: content || undefined, box: [left / scale, top / scale, cropped.width / scale, cropped.height / scale], sourceKind: isText ? 'pdf-text' : 'pdf-shading', editable: isText && status !== 'outlined', ...(outlines.length ? { outlines } : {}), shading }
     if (status === 'outlined') warnings.push(`${layer.name}: text outlined, not editable. Needs review.`)
     Object.defineProperty(layer, 'px', { value: cropped, enumerable: false })
     layers.push(layer)

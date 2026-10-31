@@ -49,11 +49,11 @@ test('PDF font load failure uses source glyph outlines and records review status
     try {
       const { artworkFromPdf } = await import('/src/pdfImport.js')
       const art = await artworkFromPdf(new Uint8Array(bytes))
-      return art.layers.filter(l => l.kind === 'text').map(l => ({ status: l.fontStatus, editable: l.editable, pixels: !!l.px }))
+      return art.layers.filter(l => l.kind === 'text').map(l => ({ status: l.fontStatus, editable: l.editable, pixels: !!l.px, paths: l.outlines?.length, matrix: l.outlines?.[0].transform, commands: l.outlines?.[0].commands }))
     } finally { globalThis.FontFace = Original }
   }, Array.from(syntheticPaintsPdf()))
   expect(result).toHaveLength(2)
-  expect(result.every(l => l.status === 'outlined' && !l.editable && l.pixels)).toBe(true)
+  expect(result.every(l => l.status === 'outlined' && !l.editable && l.pixels && l.paths > 0 && l.matrix.length === 6 && l.commands.length > 0)).toBe(true)
 })
 
 

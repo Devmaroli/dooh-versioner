@@ -124,7 +124,7 @@ export async function rasterizeSvgLayer(layer) {
   if (layer.clip?.d) { context.clip(new Path2D(layer.clip.d)) }
   else if (layer.clip?.rect) { const [cx, cy, cw, ch] = layer.clip.rect; context.beginPath(); context.rect(cx, cy, cw, ch); context.clip() }
   if (layer.svgShape) {
-    const defs = [...new Set([layer.fillGradient?.svg, layer.strokeGradient?.svg].filter(Boolean))].join('')
+    const defs = [...new Set([layer.fillGradient, layer.strokeGradient].map(gradient => gradient ? svgElement(gradient.type, gradient.attrs, gradient.stops.map(stop => svgElement('stop', stop)).join('')) : null).filter(Boolean))].join('')
     const m = layer.transform || [1, 0, 0, 1, 0, 0]
     const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${canvas.width}" height="${canvas.height}" viewBox="${x} ${y} ${w} ${h}"><defs>${defs}</defs><g transform="matrix(${m.join(' ')})">${layer.svgShape}</g></svg>`
     const url = URL.createObjectURL(new Blob([svg], { type: 'image/svg+xml' }))
