@@ -1725,9 +1725,9 @@ var Adapt = (() => {
           c = 0.6;
         }
       } else if (l.kind === "image" || l.kind === "smart") {
-        role = "product";
-        why = "image/smart object, not full-bleed";
-        c = 0.5;
+        role = "unassigned";
+        why = "image or smart object without a recognised product, logo or text name; confirm the role";
+        c = 0.35;
       }
       if (!tag && l.kind === "group" && role !== "kv" && role !== "logo") {
         role = "ignore";
@@ -1747,7 +1747,7 @@ var Adapt = (() => {
         why = "full-bleed layer under another full-bleed layer (not visible)";
         c = 0.8;
       }
-      if (!tag && !texts.length && (l.kind === "image" || l.kind === "smart") && role === "product") {
+      if (!tag && !texts.length && (l.kind === "image" || l.kind === "smart") && (role === "product" || role === "unassigned")) {
         const asp = l.box[2] / Math.max(1, l.box[3]), hF = l.box[3] / a.h;
         if (/\btext|headline|tagline|slogan|claim/.test(n) || asp >= 4 && hF <= 0.2) {
           const al = (o) => [[o.box[0], l.box[0]], [o.box[0] + o.box[2], l.box[0] + l.box[2]], [o.box[0] + o.box[2] / 2, l.box[0] + l.box[2] / 2]].some(([u, v]) => Math.abs(u - v) <= a.w * 0.03);

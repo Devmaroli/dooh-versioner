@@ -15,13 +15,15 @@ test('missing languages never create export rows', () => {
   expect(availableRows([{ lang: '' }], rows)).toEqual([])
   expect(availableRows([], rows)).toEqual([])
 })
-test('visiting a stage cannot complete it; refinement requires manual review', () => {
+test('visiting a stage cannot complete it; review stays open until outputs are approved', () => {
   expect(workflowStatus('analyse', [], 6)).toBe('Not ready')
   expect(workflowStatus('import', [{ lang: '' }], 6)).toBe('Needs attention')
   expect(workflowStatus('import', [{ lang: 'AR' }], 6)).toBe('Complete')
-  expect(workflowStatus('refine', [{ lang: 'AR' }], 6)).toBe('Manual review required')
+  expect(workflowStatus('analyse', [{ lang: 'AR', a: { source: { format: 'psd' } }, an: { roles: [] } }], 6)).toBe('Needs attention')
+  expect(workflowStatus('analyse', [{ lang: 'AR', a: { source: { format: 'psd' } }, an: { roles: [{ role: 'headline', confidence: 1 }] } }], 6)).toBe('Complete')
+  expect(workflowStatus('review', [{ lang: 'AR' }], 6)).toBe('Needs attention')
   expect(workflowStatus('export', [{ lang: 'AR' }], 0)).toBe('Not ready')
-  expect(workflowStatus('export', [{ lang: 'AR' }], 1)).toBe('Manual review required')
+  expect(workflowStatus('export', [{ lang: 'AR' }], 1)).toBe('Needs attention')
 })
 test('metadata round trip preserves identity, tags and constraints; clears pixel caches', () => {
   const original = { id: 'asset-1', name: 'same.psd', lang: 'EN', an: { roles: [{ id: 'p1', role: 'legal', confidence: 1 }] }, layerConstraints: { p1: { required: true, anchor: 'right' } } }
@@ -41,5 +43,5 @@ test('IndexedDB replaces the complete project atomically and preserves duplicate
   const saved = await readProject()
   expect(saved.assets.map(a => a.metadata.id)).toEqual(['two'])
   expect(saved.picked).toEqual([])
-  expect(saved.version).toBe(1)
+  expect(saved.version).toBe(2)
 })

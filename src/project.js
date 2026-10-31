@@ -1,5 +1,8 @@
+import { migrateMetadata } from './tagging.js'
+
 // Metadata is serializable; original files live in IndexedDB, never localStorage.
-export const STEPS = ['import', 'analyse', 'adapt', 'review', 'refine', 'export']
+export const STEPS = ['import', 'analyse', 'adapt', 'review', 'export']
+export const STEP_LABELS = { import: 'Import', analyse: 'Analyse', adapt: 'Adapt', review: 'Review & edit', export: 'Export' }
 export const MAX_FILE_BYTES = 128 * 1024 * 1024
 export function validateFile(file) {
   if (!/\.(psd|psb|svg|png|jpe?g|webp)$/i.test(file.name)) throw new Error('Unsupported format. Use PSD, PSB, SVG, PNG, JPEG or WebP.')
@@ -16,30 +19,37 @@ export function availableRows(assets, rows) {
 export function workflowStatus(step, assets, selectedCount) {
   const mapped = assets.length > 0 && assets.every(a => a.lang === 'EN' || a.lang === 'AR')
   if (step === 'import') return mapped ? 'Complete' : assets.length ? 'Needs attention' : 'Ready'
-  if (step === 'analyse') return mapped ? 'Ready' : 'Not ready'
-  if (step === 'adapt') return mapped ? 'Ready' : 'Not ready'
-  if (step === 'review' || step === 'refine' || step === 'export') return mapped && selectedCount > 0 ? 'Manual review required' : 'Not ready'
-  return 'Not implemented'
+  if (!mapped) return 'Not ready'
+  if (step === 'analyse') {
+    const unresolved = assets.some(asset => asset.a?.source?.format !== 'image' && !(asset.an?.roles || []).some(role => role.role === 'headline' && (role.confidence === 1 || role.confirmed)))
+    return unresolved ? 'Needs attention' : 'Complete'
+  }
+  if (step === 'adapt') return 'Ready'
+  // Review and export stay incomplete until outputs are actually approved. Opening the stage does not complete it.
+  if (step === 'review' || step === 'export') return selectedCount > 0 ? 'Needs attention' : 'Not ready'
+  return 'Not ready'
 }
 export function metadataFor(art) {
-  return { editorHistory: art.editorHistory || null, id: art.id, name: art.name, lang: art.lang, roles: art.an.roles, layerConstraints: art.layerConstraints || {}, backgroundRegion: art.backgroundRegion || null, layerVisibility: art.layerVisibility || {}, layerLinks: art.layerLinks || [], previewSettings: art.previewSettings || {}, calibration: art.calibration || null, originalBorder: art.originalBorder || null, layerCrops: art.layerCrops || {}, wordPieces: art.wordPieces || [] }
+  return { schemaVersion: 2, editorHistory: art.editorHistory || null, id: art.id, name: art.name, lang: art.lang, roles: art.an.roles, layerConstraints: art.layerConstraints || {}, backgroundRegion: art.backgroundRegion || null, layerVisibility: art.layerVisibility || {}, layerLinks: art.layerLinks || [], previewSettings: art.previewSettings || {}, calibration: art.calibration || null, originalBorder: art.originalBorder || null, layerCrops: art.layerCrops || {}, wordPieces: art.wordPieces || [], exportAcknowledgement: art.exportAcknowledgement || null }
 }
 export function restoreMetadata(art, metadata) {
-  art.editorHistory = metadata.editorHistory || null
-  art.id = metadata.id
-  art.lang = metadata.lang
-  art.layerConstraints = metadata.layerConstraints || {}
-  art.backgroundRegion = metadata.backgroundRegion || null
-  art.layerVisibility = metadata.layerVisibility || {}
-  art.layerLinks = metadata.layerLinks || []
-  art.previewSettings = metadata.previewSettings || {}
-  art.calibration = metadata.calibration || null
-  art.originalBorder = metadata.originalBorder || null
-  art.layerCrops = metadata.layerCrops || {}
-  art.wordPieces = metadata.wordPieces || []
+  const saved = migrateMetadata(metadata)
+  art.editorHistory = saved.editorHistory || null
+  art.id = saved.id
+  art.lang = saved.lang
+  art.layerConstraints = saved.layerConstraints || {}
+  art.backgroundRegion = saved.backgroundRegion || null
+  art.layerVisibility = saved.layerVisibility || {}
+  art.layerLinks = saved.layerLinks || []
+  art.previewSettings = saved.previewSettings || {}
+  art.calibration = saved.calibration || null
+  art.originalBorder = saved.originalBorder || null
+  art.layerCrops = saved.layerCrops || {}
+  art.wordPieces = saved.wordPieces || []
+  art.exportAcknowledgement = saved.exportAcknowledgement || null
   const ids = new Set([...art.an.roles.map(r => r.id), ...art.wordPieces.map(p => p.id)])
   // Re-run automatic suggestions on recovery; only designer/source-confirmed roles override them.
-  for (const role of metadata.roles.filter(r => ids.has(r.id) && (r.confidence === 1 || r.confirmed))) {
+  for (const role of saved.roles.filter(r => ids.has(r.id) && (r.confidence === 1 || r.confirmed))) {
     const index = art.an.roles.findIndex(r => r.id === role.id)
     if (index < 0) art.an.roles.push(role)
     else art.an.roles[index] = role

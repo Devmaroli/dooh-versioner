@@ -4,6 +4,7 @@ import { layerStyle, BLEND_MODES } from './blending.js'
 import { stackOrder } from './stack.js'
 import { allLayers, unionBounds } from './artwork.js'
 import { borderGeometry } from './border.js'
+import { canonicalRole, isBackgroundRole, isExcludedRole, layoutRole, readinessStatus } from './tagging.js'
 
 export const FAMILIES = ['landscape', 'ultrawide', 'ultratall', 'vertical', 'compact']
 export const GUIDE_PRESETS = ['2.6 Screen', 'Al Salam Mall', 'Al Nassar Tower Vertical', 'Alshaheed - Mupi', 'The Gate Mall Outdoor']
@@ -34,7 +35,12 @@ export function contentUnits(art, detached = [], panel) {
   const view = panel ? { ...art, layerVisibility:visibility } : art
   const roles = new Map(art.an.roles.map(r => [r.id, r]))
   const layers = allLayers(view).filter(l => !l.effectiveHidden && !l.splitIntoWords && l.px && !l.children?.length && l.box?.[2] > 0 && l.box?.[3] > 0)
-  const foreground = layers.filter(l => roles.get(l.id)?.role !== 'bg' && !(roles.get(l.id)?.role === 'border' && art.originalBorder?.sourceLayerId === l.id) && !(roles.get(l.id)?.role === 'ignore' && roles.get(l.id)?.confidence === 1 && !(panel?.nodes.find(n=>n.sourceIds?.includes(l.id))?.visible)))
+  const foreground = layers.filter(l => {
+    const tagged = roles.get(l.id), role = canonicalRole(tagged?.role)
+    const panelVisible = !!panel?.nodes.find(n => n.sourceIds?.includes(l.id))?.visible
+    const excluded = ((isExcludedRole(role) && (tagged?.confidence === 1 || tagged?.confirmed)) || art.layerConstraints?.[l.id]?.inclusion === 'exclude') && !panelVisible
+    return !isBackgroundRole(role) && !(role === 'border' && art.originalBorder?.sourceLayerId === l.id) && !excluded
+  })
   const available = new Map(foreground.map(l => [l.id, l])), used = new Set(), units = []
   function add(id, members, role, name) {
     if (!members.length) return
@@ -66,9 +72,10 @@ export function contentUnits(art, detached = [], panel) {
   units.sort((a, b) => Math.min(...a.layerIds.map(id => order.get(id) ?? 0)) - Math.min(...b.layerIds.map(id => order.get(id) ?? 0)))
   return units
 }
-function slot(role, family, index, count) {
+function slot(role, family, index, count, priority = 'medium') {
+  const mapped = layoutRole(role)
   const slots = (family === 'vertical' || family === 'ultratall') ? {
-    headline: [.08, .08, .84, .35], product: [.08, .46, .84, .2], offer: [.08, .7, .84, .09], cta: [.08, .82, .84, .07], logo: [.35, .92, .3, .05], legal: [.05, .96, .9, .025], price: [.08, .8, .3, .08],
+    headline: [.08, .06, .84, priority === 'critical' ? .32 : .28], product: [.1, .36, .8, .2], offer: [.08, .58, .84, priority === 'critical' ? .18 : .14], cta: [.1, .74, .8, .09], logo: [.18, .845, .64, .09], legal: [.06, .955, .88, .03], price: [.08, .74, .36, .09],
   } : family === 'ultrawide' ? {
     headline: [.04, .12, .36, .76], product: [.43, .12, .2, .76], offer: [.66, .12, .28, .4], cta: [.66, .6, .28, .25], logo: [.87, .82, .09, .12], legal: [.03, .93, .8, .04], price: [.65, .65, .15, .2],
   } : family === 'compact' ? {
@@ -77,7 +84,7 @@ function slot(role, family, index, count) {
     headline: [.04, .12, .43, .72], product: [.5, .12, .44, .44], offer: [.53, .6, .4, .2], cta: [.53, .84, .32, .09], logo: [.83, .84, .12, .1], legal: [.04, .95, .75, .025], price: [.52, .8, .2, .1],
   }
   slots.stamp = family === 'vertical' || family === 'ultratall' ? [.08, .02, .84, .1] : [.04, .02, .25, .16]
-  const box = slots[role] || [.08, .08 + .84 * index / Math.max(1, count), .84, .75 / Math.max(1, count)]
+  const box = slots[mapped] || [.08, .08 + .84 * index / Math.max(1, count), .84, .75 / Math.max(1, count)]
   return { x: box[0], y: box[1], w: box[2], h: box[3] }
 }
 export function fitFrame(frame, unit, screen, art) {
@@ -103,10 +110,10 @@ export function fitFrame(frame, unit, screen, art) {
 }
 export function initialProof(art, screen) {
   const units = contentUnits(art), family = layoutFamily(screen)
-  const frames = Object.fromEntries(units.map((u, index) => [u.id, fitFrame(slot(u.role, family, index, units.length), u, screen, art)]))
+  const frames = Object.fromEntries(units.map((u, index) => [u.id, fitFrame(slot(u.role, family, index, units.length, u.constraint?.priority), u, screen, art)]))
   for (const parent of new Set(units.map(u => u.wordSourceId || u.legacyId).filter(Boolean))) {
     const words = units.filter(u => (u.wordSourceId || u.legacyId) === parent), box = unionBounds(words.map(u => ({ box: [u.box.x, u.box.y, u.box.w, u.box.h] })))
-    const group = fitFrame(slot(words[0].role, family, 0, 1), { box, constraint: words[0].constraint }, screen, art)
+    const group = fitFrame(slot(words[0].role, family, 0, 1, words[0].constraint?.priority), { box, constraint: words[0].constraint }, screen, art)
     for (const word of words) frames[word.id] = { x: group.x + (word.box.x - box.x) / box.w * group.w, y: group.y + (word.box.y - box.y) / box.h * group.h, w: word.box.w / box.w * group.w, h: word.box.h / box.h * group.h }
   }
   return { screen: { name: screen.name, w: screen.w, h: screen.h }, sourceSignature: sourceSignature(art), approved: false, frames }
@@ -122,7 +129,7 @@ export function guideLayout(art, screen, proof = proofForScreen(art,screen)) {
     const group = fitFrame(frames[key], { box, constraint: {} }, screen, art)
     for (const unit of members) frames[unit.id] = { x: group.x + (unit.box.x - box.x) / box.w * group.w, y: group.y + (unit.box.y - box.y) / box.h * group.h, w: unit.box.w / box.w * group.w, h: unit.box.h / box.h * group.h }
   }
-  const layout = units.map(original => { const free = base.freeUnitIds?.includes(original.id); const unit = free || (base.groups || []).some(g => g.kind === 'link' && g.unitIds.includes(original.id)) ? { ...original, constraint: { ...original.constraint, anchor: 'free', freeTransform: !!free } } : original; return ({ ...unit, frame: fitFrame(frames[unit.id] || slot(unit.role, layoutFamily(screen), 0, 1), unit, screen, art) }) })
+  const layout = units.map(original => { const free = base.freeUnitIds?.includes(original.id); const unit = free || (base.groups || []).some(g => g.kind === 'link' && g.unitIds.includes(original.id)) ? { ...original, constraint: { ...original.constraint, anchor: 'free', freeTransform: !!free } } : original; return ({ ...unit, frame: fitFrame(frames[unit.id] || slot(unit.role, layoutFamily(screen), 0, 1, unit.constraint?.priority), unit, screen, art) }) })
   // A proof group transfers as one geometric unit, preserving word spacing and aspect.
   for (const group of base.groups || []) {
     const members = layout.filter(u => group.unitIds.includes(u.id) && frames[u.id])
@@ -174,7 +181,12 @@ export function guideFindings(art, screen, layout, proof = proofForScreen(art,sc
   }
   if (layout.some(u => u.proofGroup && u.constraint.anchor && u.constraint.anchor !== 'free')) issues.push({ blocked: true, message: 'An editor group contains edge-anchored elements. Ungroup it before applying individual edge constraints.' })
   if (!layout.length) issues.push({ blocked: true, message: 'No original foreground pixels are available.' })
-  if (art.a.source?.format !== 'image' && !layout.some(u => u.role === 'headline')) issues.push({ blocked: true, message: 'Identify the main headline in Analyse before approving this guide.' })
+  if (art.a.source?.format !== 'image' && !layout.some(u => canonicalRole(u.role) === 'headline')) issues.push({ blocked: true, message: 'Identify the main headline in Analyse before approving this guide.' })
+  if ((art.wordPieces || []).some(piece => canonicalRole(art.an.roles.find(role => role.id === piece.parentId)?.role) === 'logo' || art.layerConstraints?.[piece.parentId]?.protectedLogo)) issues.push({ blocked: true, message: 'A logo has been split into words. Restore the combined logo before approval.' })
+  for (const [id, constraint] of Object.entries(art.layerConstraints || {})) if (constraint.required && constraint.inclusion === 'exclude') issues.push({ blocked: true, message: `Required layer ${allLayers(art).find(l => l.id === id)?.name || id} is excluded. Required content cannot be omitted.` })
+  const backgrounds = allLayers(art).filter(layer => isBackgroundRole(art.an.roles.find(role => role.id === layer.id)?.role) && layer.box)
+  if (backgrounds.some(layer => layer.box[0] < 0 || layer.box[1] < 0 || layer.box[0] + layer.box[2] > art.a.w || layer.box[1] + layer.box[3] > art.a.h)) issues.push({ blocked: false, message: 'The background layer extends outside the artboard. Its full source extent stays available for texture selection.' })
+  if (layout.some(unit => canonicalRole(unit.role) === 'offer' && unit.constraint?.priority === 'critical') && layout.some(unit => canonicalRole(unit.role) === 'headline' && unit.constraint?.priority === 'low')) issues.push({ blocked: false, message: 'The offer is marked more important than the headline. Check prominence before approval.' })
   for (const [id, c] of Object.entries(art.layerConstraints || {})) {
     const pieces = (art.wordPieces || []).filter(p => p.parentId === id)
     const present = pieces.length ? pieces.every(p => layout.some(u => u.layerIds.includes(p.id))) : layout.some(u => u.layerIds.includes(id)) || art.originalBorder?.sourceLayerId === id && allLayers(art).some(l => l.id === id && !l.effectiveHidden)
@@ -194,4 +206,14 @@ export function guideFindings(art, screen, layout, proof = proofForScreen(art,sc
   }
   if (screen.faces?.length) issues.push({ blocked: false, message: 'Combined display: inspect each physical face after applying guides.' })
   return issues
+}
+export function outputReadiness(art, screen) {
+  const guideReady = calibrationReady(art, [screen])
+  const output = art.calibration?.outputs?.[screenProofKey(screen)]
+  const proof = output || proofForScreen(art, screen)
+  const issues = art?.a ? guideFindings(art, screen, guideLayout(art, screen, proof), proof) : [{ blocked: true, message: 'Artwork is not available.' }]
+  const blocked = issues.some(issue => issue.blocked)
+  const reviewCount = issues.filter(issue => !issue.blocked).length
+  const approved = !!(output?.approved && output.sourceSignature === sourceSignature(art))
+  return { status: readinessStatus({ guideReady, outputExists: !!output, approved, blocked, reviewCount }), issues, blocked, reviewCount, approved, guideReady }
 }

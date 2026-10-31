@@ -1,5 +1,5 @@
 import { expect, test } from 'vitest'
-import { LayerRecord, reducePanel, orderedNodes, unlocked, normalizePanel, selectPanelLayers, effectiveLocks, effectiveVisible, reconcilePanel } from '../../layerPanelModel'
+import { LayerRecord, reducePanel, orderedNodes, unlocked, normalizePanel, selectPanelLayers, effectiveLocks, effectiveVisible, reconcilePanel, moveTreeFocus } from '../../layerPanelModel'
 const node=(id:string,parentId:string|null=null,type:LayerRecord['type']='pixel'):LayerRecord=>({id,name:id,type,parentId,visible:true,blendMode:'normal',opacity:1,fill:1,locks:unlocked(),mask:null,sourceIds:[id],memberIds:[id]})
 test('typed layer tree groups, reparents, sorts and prevents cycles',()=>{
   let state={version:1 as const,nodes:[node('a'),node('b'),node('c')]}
@@ -25,6 +25,9 @@ test('locks enforce appearance, reparenting and parent visibility without corrup
 test('Ctrl and Shift selection respect visible row order',()=>{
   expect(selectPanelLayers(['a'],'c',['a','b','c'],'a',{shiftKey:true})).toEqual(['a','b','c'])
   expect(selectPanelLayers(['a'],'c',['a','b','c'],'a',{ctrlKey:true})).toEqual(['a','c'])
+  expect(moveTreeFocus(['a','b','c'],'b','ArrowDown')).toBe('c')
+  expect(moveTreeFocus(['a','b','c'],'b','Home')).toBe('a')
+  expect(moveTreeFocus(['a','b','c'],'a','ArrowUp')).toBe('a')
 })
 test('new word layers preserve parent position in tree and a new border appears before background',()=>{
   const old={version:1 as const,nodes:[node('layer:h'),node('__background')]}

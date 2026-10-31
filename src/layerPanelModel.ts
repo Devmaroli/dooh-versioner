@@ -103,6 +103,15 @@ export function reducePanel(state: LayerPanelState, action: LayerPanelAction): L
   return normalizePanel({ version: 1, nodes })
 }
 
+export function moveTreeFocus(order: string[], current: string | undefined, key: string): string | null {
+  if (!order.length) return null
+  const index = Math.max(0, order.indexOf(current || order[0]))
+  if (key === 'ArrowDown') return order[Math.min(order.length - 1, index + 1)]
+  if (key === 'ArrowUp') return order[Math.max(0, index - 1)]
+  if (key === 'Home') return order[0]
+  if (key === 'End') return order[order.length - 1]
+  return null
+}
 export function selectPanelLayers(current: string[], id: string, order: string[], anchor: string | null, modifiers: { shiftKey?: boolean; ctrlKey?: boolean; metaKey?: boolean }): string[] {
   if (modifiers.shiftKey && anchor && order.includes(anchor)) { const a = order.indexOf(anchor), b = order.indexOf(id); const range = order.slice(Math.min(a,b), Math.max(a,b)+1); return modifiers.ctrlKey || modifiers.metaKey ? [...new Set([...current, ...range])] : range }
   return modifiers.ctrlKey || modifiers.metaKey ? current.includes(id) ? current.filter(x => x !== id) : [...current,id] : [id]

@@ -148,7 +148,7 @@ export function App() {
       try {
         const saved: any = await readProject()
         if (!alive) return
-        if (saved && saved.version !== 1) throw new Error('This project was saved by an unsupported version.')
+        if (saved && saved.version !== 1 && saved.version !== 2) throw new Error('This project was saved by an unsupported version.')
         if (saved) {
           const failures: string[] = []
           for (const item of saved.assets) {
