@@ -52,10 +52,6 @@
 .lp-message:empty { display: none; }
 .lp-empty { padding: 20px; }
 
-.lp-order { display: flex; flex-wrap: wrap; gap: 6px; padding: 6px 10px; font-size: 11px; }
-.lp-order button { font-size: 11px; padding: 5px; }
-.lp-order small { width: 100%; color: #b1bed2; }
-
 .lp-preparation { padding: 0 10px; }
 .lp-preparation button { width: 100%; }
 .lp-selection-help { padding: 0 10px; font-size: 11px; }

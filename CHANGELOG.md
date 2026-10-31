@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.7.5 — 2026-11-01
+
+- Move Analyse’s Manage files and Next step actions beside the heading, remove the bottom summary cards, and let the canvas and rails fill the remaining viewport.
+- Remove layer up/down buttons. Drag reordering remains available; [ moves the selected layer up and ] moves it down within its folder, respecting locks and leaving text inputs alone. Compact guidance and empty preparation status reclaim room for rows.
+
+Validation: 106 unit tests and 23 synthetic browser tests passed; nine private-artwork browser cases skipped. Both typechecks, web/extension builds and the offline MV3 test passed (one private extension case skipped).
+
 ## 1.7.4 — 2026-11-01
 
 - Increment the release version for the delivered VectorCraft SVG WASM update. Package metadata, extension manifest/launcher and runtime version now agree on 1.7.4.

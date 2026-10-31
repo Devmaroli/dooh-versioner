@@ -129,9 +129,51 @@
 .analyse-layers .layers-panel { height: 100%; }
 .analyse-layers .lp-heading h2 { display: none; }
 .analyse-layers .lp-heading { justify-content: flex-end; }
-.analyse-layers .lp-preparation, .analyse-layers .lp-selection-help, .analyse-layers .lp-order { order: 2; }
+.analyse-layers .lp-preparation { order: 2; padding: 4px 10px; }
+.analyse-layers .lp-selection-help { margin: 4px 10px; padding: 0; font-size: 10px; }
 .analyse-layers .lp-list { min-height: 140px; }
 .analyse-layers .lp-filter, .analyse-layers .lp-appearance { font-size: 12px; }
 .analyse-layers .lp-filter label { display: grid; gap: 4px; }
 .analyse-layers .lp-appearance > label { display: block; margin: 4px 0; }
 .analyse-layers .lp-filter input, .analyse-layers input[type=number] { min-width: 0; background: #111c2e; color: #fff; border: 1px solid #99abc5; padding: 5px; border-radius: 4px; }
+
+/* Fill the viewport beneath the app header; navigation sits beside the heading. */
+@media (min-width: 701px) {
+  #root:has(> .analyse-workspace) { height: 100dvh; display: flex; flex-direction: column; }
+  #root:has(> .analyse-workspace) > header { flex-shrink: 0; }
+  .analyse-workspace { flex: 1; min-height: 0; display: flex; }
+  .analyse-workspace .studio-intro { position: relative; display: flex; flex-direction: column; flex: 1; min-width: 0; min-height: 0; padding: 16px; }
+  .analyse-workspace .studio-intro > h1, .analyse-workspace .studio-intro > p { padding-right: 240px; }
+  .analyse-workspace .studio-intro > p { margin: 0; }
+  .analyse-workspace .workflow-actions { position: absolute; top: 24px; right: 16px; margin: 0; }
+  .analyse-workspace .analysis-picker { flex: 1; min-height: 0; display: grid; grid-template-columns: max-content minmax(0, max-content) 1fr; grid-template-rows: max-content minmax(0, 1fr); align-items: center; margin: 12px 0 0; }
+  .analyse-workspace .analyse-editor { grid-column: 1 / -1; align-self: stretch; height: auto; min-height: 0; margin-top: 12px; }
+  .analyse-layers .layers-panel { min-height: 0; }
+  .analyse-layers .layers-panel > :not(.lp-list) { flex-shrink: 0; }
+  .analyse-layers .lp-list { min-height: 0; }
+  .analyse-layers .lp-heading { padding: 4px 10px; }
+  .analyse-layers .lp-heading label { font-size: 11px; }
+}
+
+@media (min-width: 701px) {
+  .analyse-workspace .studio-intro { padding: 12px; }
+  .analyse-workspace .studio-intro > h1 { font-size: 22px; margin: 6px 0; }
+  .analyse-workspace .studio-intro > p { font-size: 11px; }
+  .analyse-workspace .analysis-picker { margin-top: 8px; }
+  .analyse-workspace .analyse-editor { margin-top: 8px; }
+  .analyse-workspace .workflow-actions { top: 20px; right: 12px; }
+  .analyse-layers .lp-heading { justify-content: space-between; gap: 6px; }
+  .analyse-layers .lp-heading .lp-preparation { padding: 0; order: 0; }
+  .analyse-layers .lp-preparation button { white-space: nowrap; font-size: 11px; }
+  .analyse-layers .lp-heading label { font-size: 0; }
+  .analyse-layers .lp-selection-help { display: none; }
+  .analyse-layers .lp-filter { padding: 6px 10px; }
+  .analyse-layers .lp-filter label { display: block; font-size: 0; }
+  .analyse-layers .lp-filter select, .analyse-layers .lp-heading select, .analyse-layers .lp-appearance select { padding: 5px; font-size: 12px; border-radius: 4px; }
+  .analyse-layers .lp-appearance { padding: 4px 10px; }
+  .analyse-layers .lp-appearance > label { display: flex; align-items: center; justify-content: space-between; margin: 0 0 4px; }
+  .analyse-layers .lp-alpha { grid-template-columns: 30px 60px 1fr; gap: 6px; margin: 3px 0; }
+  .analyse-layers .lp-alpha label { display: contents; }
+  .analyse-layers .lp-alpha input[type=number] { width: 60px; padding: 3px; }
+  .analyse-layers .lp-locks { padding: 3px 10px; }
+}
